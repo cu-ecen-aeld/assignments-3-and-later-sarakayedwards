@@ -2,7 +2,7 @@
 #include "stdlib.h"
 #include "string.h"
 #include "unistd.h"
-#include "wait.h"
+#include "sys/wait.h"
 #include "fcntl.h"
 
 
@@ -25,6 +25,10 @@ bool do_system(const char *cmd)
     int returnVal;
     
     returnVal = system(cmd);
+    
+    if (returnVal == -1) {
+       return false;
+    }
 
     if (WIFEXITED(returnVal)) {
         return true;
@@ -72,7 +76,7 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
-    int pid, waitReturnVal, execReturnVal = -1;
+    int pid, execReturnVal = -1;
     
     // create child process
     fflush(stdout);
@@ -92,8 +96,7 @@ bool do_exec(int count, ...)
             printf("%s ", command[i]);
         }
             
-        printf("***SKE About to call execv with %s\n", commandStr);
-        execReturnVal = execv(command[0], &command[1]);
+        execReturnVal = execv(command[0], command);
         
         if (execReturnVal != 0) {
             //printf("non-zero returnVal from execv");
@@ -102,11 +105,23 @@ bool do_exec(int count, ...)
     }
     else {
         // this is the parent process
-        waitReturnVal = wait(NULL);
-        if (waitReturnVal != 0) {
-            //printf("non-zero waitReturnVal");
+        int status;
+        int waitReturnVal;
+
+        waitReturnVal = waitpid(pid, &status, 0);
+        printf("\n***SKE-do_exec-Parent process... waitReturnVal = %d, status = %x", waitReturnVal, status);
+        
+        if (waitReturnVal == -1) {
             return false;
         }
+
+        if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+            return false;
+        }
+                
+        printf("***SKE-do_exec-Parent process... about to return true.");
+
+
     }
 
     va_end(args);
@@ -146,13 +161,13 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     int fd;
     
     // open the file
-    fd = open(outputfile, O_WRONLY | O_CREAT | O_CLOEXEC);
+    fd = open(outputfile, O_WRONLY | O_CREAT | O_CLOEXEC | O_TRUNC, 0644);
     if (fd < 0) {
         return false;
     }
     
     // redirect stdout to the file
-    dup2(STDOUT_FILENO, fd);
+    dup2(fd, STDOUT_FILENO);
     
     int pid, waitReturnVal, execReturnVal = -1;
     
@@ -165,20 +180,28 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     }
     else if (pid == 0) {
         // this is the child process
-        execReturnVal = execv(command[0], &command[1]);
+        execReturnVal = execv(command[0], command);
         
         if (execReturnVal != 0) {
-            //printf("non-zero returnVal from execv");
             return false;   
         }
     }
     else {
         // this is the parent process
-        waitReturnVal = wait(NULL);
-        if (waitReturnVal != 0) {
-            //printf("non-zero waitReturnVal");
+        int status;
+
+        waitReturnVal = waitpid(pid, &status, 0);
+        printf("\n***SKE-do_exec_redirect-Parent process... waitReturnVal = %d, status = %x", waitReturnVal, status);
+        if (waitReturnVal == -1) {
             return false;
         }
+
+        if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+            return false;
+        }
+        
+        printf("***SKE-do_exec_redirect-Parent process... about to return true.");
+
     }
 
     va_end(args);
