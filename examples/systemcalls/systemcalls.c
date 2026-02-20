@@ -1,4 +1,10 @@
 #include "systemcalls.h"
+#include "stdlib.h"
+#include "string.h"
+#include "unistd.h"
+#include "wait.h"
+#include "fcntl.h"
+
 
 /**
  * @param cmd the command to execute with system()
@@ -16,8 +22,16 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
+    int returnVal;
+    
+    returnVal = system(cmd);
 
-    return true;
+    if (WIFEXITED(returnVal)) {
+        return true;
+    }
+    else {
+        return false;
+    }
 }
 
 /**
@@ -47,7 +61,7 @@ bool do_exec(int count, ...)
     command[count] = NULL;
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
-    command[count] = command[count];
+    //command[count] = command[count];
 
 /*
  * TODO:
@@ -58,6 +72,42 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
+    int pid, waitReturnVal, execReturnVal = -1;
+    
+    // create child process
+    fflush(stdout);
+    pid = fork();
+    if (pid < 0) {
+        printf("bad pid");
+        return false;
+    }
+    else if (pid == 0) {
+        // this is the child process
+        // debug
+        char commandStr[4096] = "";
+
+        for (i=0; i<count; i++) {
+            strcat(commandStr, command[i]);
+            strcat(commandStr, " ");
+            printf("%s ", command[i]);
+        }
+            
+        printf("***SKE About to call execv with %s\n", commandStr);
+        execReturnVal = execv(command[0], &command[1]);
+        
+        if (execReturnVal != 0) {
+            //printf("non-zero returnVal from execv");
+            return false;   
+        }
+    }
+    else {
+        // this is the parent process
+        waitReturnVal = wait(NULL);
+        if (waitReturnVal != 0) {
+            //printf("non-zero waitReturnVal");
+            return false;
+        }
+    }
 
     va_end(args);
 
@@ -82,7 +132,7 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     command[count] = NULL;
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
-    command[count] = command[count];
+    //command[count] = command[count];
 
 
 /*
@@ -92,6 +142,44 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *   The rest of the behaviour is same as do_exec()
  *
 */
+    
+    int fd;
+    
+    // open the file
+    fd = open(outputfile, O_WRONLY | O_CREAT | O_CLOEXEC);
+    if (fd < 0) {
+        return false;
+    }
+    
+    // redirect stdout to the file
+    dup2(STDOUT_FILENO, fd);
+    
+    int pid, waitReturnVal, execReturnVal = -1;
+    
+    // create child process
+    fflush(stdout);
+    pid = fork();
+    if (pid < 0) {
+        //printf("bad pid");
+        return false;
+    }
+    else if (pid == 0) {
+        // this is the child process
+        execReturnVal = execv(command[0], &command[1]);
+        
+        if (execReturnVal != 0) {
+            //printf("non-zero returnVal from execv");
+            return false;   
+        }
+    }
+    else {
+        // this is the parent process
+        waitReturnVal = wait(NULL);
+        if (waitReturnVal != 0) {
+            //printf("non-zero waitReturnVal");
+            return false;
+        }
+    }
 
     va_end(args);
 
