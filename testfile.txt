@@ -1,10 +1,9 @@
 home is $HOME
-
-***SKE-do_exec_redirect-Parent process... waitReturnVal = 66260, status = 0***SKE-do_exec_redirect-Parent process... about to return true.Remove trailing newline
+Remove trailing newline
 Read home is $HOME from testfile.txt
 execv /bin/echo home is $HOME returned home is $HOME
 /home/vboxuser/ECE5305/aesd/assignments-3-and-later-sarakayedwards/assignment-autotest/test/assignment3/Test_systemcalls.c:72:test_exec_redirect_calls:PASS
 
 -----------------------
-3 Tests 1 Failures 0 Ignored 
-FAIL
+3 Tests 0 Failures 0 Ignored 
+OK

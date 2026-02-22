@@ -63,9 +63,6 @@ bool do_exec(int count, ...)
         command[i] = va_arg(args, char *);
     }
     command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    //command[count] = command[count];
 
 /*
  * TODO:
@@ -76,32 +73,19 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
-    int pid, execReturnVal = -1;
+    int pid = -1;
     
     // create child process
     fflush(stdout);
     pid = fork();
     if (pid < 0) {
-        printf("bad pid");
         return false;
     }
     else if (pid == 0) {
         // this is the child process
-        // debug
-        char commandStr[4096] = "";
-
-        for (i=0; i<count; i++) {
-            strcat(commandStr, command[i]);
-            strcat(commandStr, " ");
-            printf("%s ", command[i]);
-        }
-            
-        execReturnVal = execv(command[0], command);
-        
-        if (execReturnVal != 0) {
-            //printf("non-zero returnVal from execv");
-            return false;   
-        }
+        execv(command[0], command); 
+        perror("execv"); 
+        exit(EXIT_FAILURE); 
     }
     else {
         // this is the parent process
@@ -109,7 +93,6 @@ bool do_exec(int count, ...)
         int waitReturnVal;
 
         waitReturnVal = waitpid(pid, &status, 0);
-        printf("\n***SKE-do_exec-Parent process... waitReturnVal = %d, status = %x", waitReturnVal, status);
         
         if (waitReturnVal == -1) {
             return false;
@@ -118,10 +101,6 @@ bool do_exec(int count, ...)
         if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
             return false;
         }
-                
-        printf("***SKE-do_exec-Parent process... about to return true.");
-
-
     }
 
     va_end(args);
@@ -145,10 +124,6 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
         command[i] = va_arg(args, char *);
     }
     command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    //command[count] = command[count];
-
 
 /*
  * TODO
@@ -169,29 +144,25 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     // redirect stdout to the file
     dup2(fd, STDOUT_FILENO);
     
-    int pid, waitReturnVal, execReturnVal = -1;
+    int pid, waitReturnVal = -1;
     
     // create child process
     fflush(stdout);
     pid = fork();
     if (pid < 0) {
-        //printf("bad pid");
         return false;
     }
     else if (pid == 0) {
         // this is the child process
-        execReturnVal = execv(command[0], command);
-        
-        if (execReturnVal != 0) {
-            return false;   
-        }
+        execv(command[0], command); 
+        perror("execv"); 
+        exit(EXIT_FAILURE); 
     }
     else {
         // this is the parent process
         int status;
 
         waitReturnVal = waitpid(pid, &status, 0);
-        printf("\n***SKE-do_exec_redirect-Parent process... waitReturnVal = %d, status = %x", waitReturnVal, status);
         if (waitReturnVal == -1) {
             return false;
         }
@@ -199,9 +170,6 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
         if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
             return false;
         }
-        
-        printf("***SKE-do_exec_redirect-Parent process... about to return true.");
-
     }
 
     va_end(args);
