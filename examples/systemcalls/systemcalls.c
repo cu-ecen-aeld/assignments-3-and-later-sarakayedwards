@@ -141,9 +141,6 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
         return false;
     }
     
-    // redirect stdout to the file
-    dup2(fd, STDOUT_FILENO);
-    
     int pid, waitReturnVal = -1;
     
     // create child process
@@ -154,6 +151,11 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     }
     else if (pid == 0) {
         // this is the child process
+        // redirect stdout to the file
+        if (dup2(fd, STDOUT_FILENO) < 0) {
+            return false;
+        }
+        close(fd);
         execv(command[0], command); 
         perror("execv"); 
         exit(EXIT_FAILURE); 
@@ -163,6 +165,9 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
         int status;
 
         waitReturnVal = waitpid(pid, &status, 0);
+
+        close(fd);
+        
         if (waitReturnVal == -1) {
             return false;
         }
