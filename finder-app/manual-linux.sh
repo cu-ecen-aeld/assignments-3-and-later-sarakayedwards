@@ -59,7 +59,7 @@ fi
 mkdir -p rootfs
 cd rootfs
 mkdir -p bin dev etc home lib lib64 proc sbin sys tmp usr var
-mkdir -p ussr/bin usr/lib usr/sbin
+mkdir -p usr/bin usr/lib usr/sbin
 mkdir -p var/log
 
 
@@ -79,15 +79,16 @@ fi
 make distclean
 make defconfig
 make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE}
-make CONFIG_PREFIX=${OUTDIR} ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} install
+make CONFIG_PREFIX=${OUTDIR}/rootfs ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} install
 
 echo "Library dependencies"
-cd ${OUTDIR}
+cd ${OUTDIR}/rootfs
 ${CROSS_COMPILE}readelf -a bin/busybox | grep "program interpreter"
 ${CROSS_COMPILE}readelf -a bin/busybox | grep "Shared library"
 
 # Add library dependencies to rootfs
 SYSROOT_LIB=$(${CROSS_COMPILE}gcc --print-sysroot)
+cp ${SYSROOT_LIB}/lib/ld-linux-aarch64.so.1 ${OUTDIR}/rootfs/lib
 cp ${SYSROOT_LIB}/lib/ld-linux-aarch64.so.1 ${OUTDIR}/rootfs/lib64
 cp ${SYSROOT_LIB}/lib64/libm.so.6 ${OUTDIR}/rootfs/lib64
 cp ${SYSROOT_LIB}/lib64/libresolv.so.2 ${OUTDIR}/rootfs/lib64
@@ -104,11 +105,13 @@ make CROSS_COMPILE=aarch64-none-linux-gnu-
 
 # Copy the finder related scripts and executables to the /home directory
 # on the target rootfs
-cp writer.o "${OUTDIR}/rootfs/home"
-cp finder.sh "${OUTDIR}/rootfs/home"
-cp finder-test.sh "${OUTDIR}/rootfs/home"
-cp conf/username.txt "${OUTDIR}/rootfs/home/conf"
-cp conf/assignment.txt "${OUTDIR}/rootfs/home/conf"
+cp writer.o "${OUTDIR}/rootfs/home/"
+cp finder.sh "${OUTDIR}/rootfs/home/"
+cp finder-test.sh "${OUTDIR}/rootfs/home/"
+cp Makefile "${OUTDIR}/rootfs/home/"
+mkdir "${OUTDIR}/rootfs/home/conf"
+cp conf/username.txt "${OUTDIR}/rootfs/home/conf/"
+cp conf/assignment.txt "${OUTDIR}/rootfs/home/conf/"
 
 cp autorun-qemu.sh "${OUTDIR}/rootfs/home"
 

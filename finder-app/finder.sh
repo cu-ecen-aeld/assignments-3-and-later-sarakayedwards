@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 #
 # Finds specified string searchstr in files in specified filesDir file directory
 #
