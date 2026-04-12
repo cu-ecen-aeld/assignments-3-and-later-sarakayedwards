@@ -11,13 +11,29 @@
 #include <unistd.h>
 #include <signal.h>
 #include <stdlib.h>
+#include <sys/queue.h>
+#include <pthread.h>
+
 
 #define BUFF_SIZE 4096
 
 int signalReceived = 0;
 int socketfd;
-int streamfd;
 int filefd;
+bool receiving;
+pthread_mutex_t fileMutex;
+pthread_t* tsThread;
+
+struct socketThread {
+    pthread_t pthread;
+    struct sockaddr connectingaddr;
+    int streamfd;
+    bool completeFlag;
+    SLIST_ENTRY(socketThread) next;
+};
+
+SLIST_HEAD(slisthead, socketThread);
+struct slisthead listHead;
 
 static void signal_handler(int signal_number) {
     int tempErrno = errno;
@@ -33,14 +49,22 @@ static void signal_handler(int signal_number) {
     }
     
     // close open sockets
+    struct socketThread *item;
+    
     close(filefd);
-    close(streamfd);
+    SLIST_FOREACH(item, &listHead, next) close(item->streamfd);
     close(socketfd);
+    
+    free(tsThread);
     
     // delete file
     remove("/var/tmp/aesdsocketdata");
     
+    pthread_mutex_destroy(&fileMutex);
+    
     errno = tempErrno;
+    
+    exit(EXIT_SUCCESS);
 }
 
 void createDaemon(void) {
@@ -57,27 +81,142 @@ void createDaemon(void) {
     // if we made it here, this is the child process
     if (setsid() < 0) exit(EXIT_FAILURE);
     
-    pid = fork();
-     if (pid < 0) {
-        syslog(LOG_USER | LOG_ERR, "Failed to fork, error = %d", errno);
-        exit(EXIT_FAILURE);
-    }
-    // parent process
-    else if (pid > 0) exit(EXIT_SUCCESS);
-    
     // set file permissions
     umask(0);
     
     // change to parent directory
     chdir("/");
     
-    // close file descriptors
-    //for (int fd = sysconf(_SC_OPEN_MAX); fd >= 0; fd--) close(fd);
-    
     // redirect standard input and output
     open("/dev/null", O_RDWR);
     dup(0);
     dup(0);
+}
+
+void receiveAndSend(struct socketThread* threadStruct) {
+    int returnVal;
+    char recvbuf[BUFF_SIZE];
+    char sendbuf[BUFF_SIZE];
+    size_t strsize;
+    int recsize;
+    bool receiving = true;
+
+    while (receiving) {
+    
+        // receive data, appending to file
+        if ((recsize = recv(threadStruct->streamfd, recvbuf, BUFF_SIZE, 0)) == -1) {
+            syslog(LOG_USER | LOG_DEBUG, "Failed to receive, error = %d", errno);
+            receiving = false;
+        }
+        else if (recsize == 0) {
+            receiving = false;
+            syslog(LOG_USER | LOG_DEBUG, "Nothing received");
+        }
+        else {
+        
+            // lock the mutex before accessing the file
+            if (pthread_mutex_lock(&fileMutex) != 0) {
+                syslog(LOG_USER | LOG_ERR, "Failed to lock mutex, error = %d", errno);
+                exit(EXIT_FAILURE);
+            }
+            
+            // write what was received to the file (append)
+            if ((returnVal = write(filefd, recvbuf, recsize)) < recsize) {
+                syslog(LOG_USER | LOG_DEBUG, "Failed to write, error = %d", errno);
+            }
+                
+            // if this is the end of the packet, send the file
+            if (recvbuf[recsize-1] == '\n') {
+                
+                // send entire file content
+                if((returnVal = lseek(filefd, 0, SEEK_SET)) != 0) {
+                    syslog(LOG_USER | LOG_DEBUG, 
+                    "Failed to seek, position = %d", returnVal);
+                }
+                while ((strsize = read(filefd, sendbuf, BUFF_SIZE)) > 0) {
+                    syslog(LOG_DEBUG, "Read %d bytes", (int)strsize);
+                    send(threadStruct->streamfd, sendbuf, strsize, MSG_DONTWAIT);
+                }
+            }
+            
+            // unlock the mutex after access is complete
+            if (pthread_mutex_unlock(&fileMutex) != 0) {
+                syslog(LOG_USER | LOG_ERR, "Failed to unlock mutex, error = %d", errno);
+                exit(EXIT_FAILURE);;
+            }
+        }
+    }
+}
+
+void manageConnection(struct socketThread* threadStruct) {
+
+    // log connection
+    // Later: Use getnameinfo() to get address in string form
+    syslog(LOG_USER | LOG_DEBUG, "Accepted connection from %d.%d.%d.%d", 
+          (int)(threadStruct->connectingaddr).sa_data[2], 
+          (int)(threadStruct->connectingaddr).sa_data[3], 
+          (int)(threadStruct->connectingaddr).sa_data[4], 
+          (int)(threadStruct->connectingaddr).sa_data[5]); 
+              
+    receiveAndSend(threadStruct);
+        
+    // close connection and log disconnection
+    threadStruct->completeFlag = true;
+    close(threadStruct->streamfd);
+    // Later: Use getnameinfo() to get address in string form
+    syslog(LOG_USER | LOG_DEBUG, "Closed connection from %d.%d.%d.%d", 
+      (int)(threadStruct->connectingaddr).sa_data[2], 
+      (int)(threadStruct->connectingaddr).sa_data[3], 
+      (int)(threadStruct->connectingaddr).sa_data[4], 
+      (int)(threadStruct->connectingaddr).sa_data[5]); 
+}
+
+void writeTimestamp(void) {
+    time_t currentTimeEpoch;
+    struct tm* currentTimeLocal;
+    char timeStr[100];
+    int timeStrSize = 0;
+    char formatStr[] = "%a, %d %b %Y %T %z"; // RFC 2822-compliant format
+    char fullTimeStr[100] = "Timestamp:";
+    int returnVal;
+
+    while (1) {
+        
+        timeStrSize = 0;
+        strcpy(timeStr, "");
+        strcpy(fullTimeStr, "Timestamp:");
+   
+        // get current time
+        currentTimeEpoch = time(NULL);
+        currentTimeLocal = localtime(&currentTimeEpoch);
+    
+        // format time and append newline
+        timeStrSize = strftime(timeStr, 100, formatStr, currentTimeLocal);
+        strcat(fullTimeStr, timeStr);
+        timeStrSize += 10;
+        fullTimeStr[timeStrSize++] = '\n';
+
+        // lock the mutex before accessing the file
+        if (pthread_mutex_lock(&fileMutex) != 0) {
+            syslog(LOG_USER | LOG_ERR, "Failed to lock mutex, error = %d", errno);
+            exit(EXIT_FAILURE);
+        }
+            
+        // append the timestamp to the file
+        if ((returnVal = write(filefd, fullTimeStr, timeStrSize)) < timeStrSize) {
+            syslog(LOG_USER | LOG_DEBUG, "Failed to write, error = %d", errno);
+        }
+                
+        // unlock the mutex after access is complete
+        if (pthread_mutex_unlock(&fileMutex) != 0) {
+            syslog(LOG_USER | LOG_ERR, "Failed to unlock mutex, error = %d", errno);
+            exit(EXIT_FAILURE);
+        }
+        
+        // wait 10 seconds
+        sleep(10);
+
+    }
 }
 
 int main(int argc, char* argv[]) {
@@ -86,17 +225,18 @@ int main(int argc, char* argv[]) {
     struct addrinfo sockaddrhints;
     struct addrinfo* mysockaddr;
     struct sockaddr connectingaddr;
-    bool connected;
-    bool receiving;
-    char recvbuf[BUFF_SIZE];
-    char sendbuf[BUFF_SIZE];
-    size_t strsize;
     socklen_t sockaddrlength = sizeof(struct sockaddr);
-    int recsize;
     int sockoption = 1; // true
     int i;
     bool daemonMode = false;
+    int streamfd;
     
+    // initialize mutex lock for file
+    if (pthread_mutex_init(&fileMutex, NULL) != 0) {
+        syslog(LOG_USER | LOG_ERR, "Failed to init mutex, error = %d", errno);
+        return errno;
+    }
+
     struct sigaction new_action;
 
     memset(&new_action, 0, sizeof(struct sigaction));
@@ -122,7 +262,6 @@ int main(int argc, char* argv[]) {
     }
 
     // create and open socket
-    //*** make sure to close this fd
     if ((socketfd = socket(PF_INET, SOCK_STREAM, 0)) == -1) {
         syslog(LOG_USER | LOG_ERR, "Failed to create socket, error = %d", errno);
         return errno;
@@ -161,90 +300,81 @@ int main(int argc, char* argv[]) {
     // free memory
     freeaddrinfo(mysockaddr);
     
+    // Open the file, creating if it doesn't exist
+    if ((filefd = open("/var/tmp/aesdsocketdata", O_RDWR|O_CREAT|O_APPEND|O_CLOEXEC, 
+                                              S_IRWXU|S_IRWXG|S_IRWXO)) == -1) {
+        syslog(LOG_USER | LOG_ERR, "Failed to open file, error = %d", errno);
+        close(socketfd);
+        return returnVal;
+    }
+    
+    // start timestamp thread
+    tsThread = malloc(sizeof(pthread_t));
+    pthread_create(tsThread, NULL, (void*)writeTimestamp, NULL);
+    
+    // initialize linked list for threads
+    struct socketThread* newThread;
+    struct slisthead listHead;
+    SLIST_INIT(&listHead);
+    
     // listen and accept connections until signal is received
     if ((returnVal = listen(socketfd, 5)) != 0) {
         syslog(LOG_USER | LOG_ERR, "Failed to listen, error = %d", errno);
         close(socketfd);
+        
+        // lock the mutex before closing the fd, then unlock
+        if (pthread_mutex_lock(&fileMutex) == 0) {
+            close(filefd);
+            if (pthread_mutex_unlock(&fileMutex) != 0) {
+                syslog(LOG_USER | LOG_ERR, "Failed to unlock mutex, error = %d", errno);
+            }
+        }
+        else {
+            syslog(LOG_USER | LOG_ERR, "Failed to lock mutex, error = %d", errno);
+        }
         return returnVal;
     }
      
     // keep accepting and handling connections until a signal is received
-    while (!signalReceived) {
+    while (1) {
     
-        //*** make sure to close this fd
         if ((streamfd = accept(socketfd, &connectingaddr, &sockaddrlength)) == -1) {
             syslog(LOG_USER | LOG_ERR, "Failed to accept, error = %d", errno);
             close(socketfd);
-            return returnVal;
-        }
-    
-        // log connection
-        // Later: Use getnameinfo() to get address in string form
-        syslog(LOG_USER | LOG_DEBUG, "Accepted connection from %d.%d.%d.%d", 
-              (int)connectingaddr.sa_data[2], (int)connectingaddr.sa_data[3], 
-              (int)connectingaddr.sa_data[4], (int)connectingaddr.sa_data[5]); 
-              
-        connected = true;
-        receiving = true;
-    
-        // Open the file, creating if it doesn't exist
-        if ((filefd = open("/var/tmp/aesdsocketdata", O_RDWR|O_CREAT|O_APPEND|O_CLOEXEC, 
-                                                  S_IRWXU|S_IRWXG|S_IRWXO)) == -1) {
-            syslog(LOG_USER | LOG_ERR, "Failed to open file, error = %d", errno);
-            close(socketfd);
-            close(streamfd);
-            return returnVal;
-        }
-    
-        while (receiving) {
-    
-            // receive data, appending to file
-            if ((recsize = recv(streamfd, recvbuf, BUFF_SIZE, 0)) == -1) {
-                syslog(LOG_USER | LOG_DEBUG, "Failed to receive, error = %d", errno);
-                receiving = false;
-            }
-            else if (recsize == 0) {
-                receiving = false;
+            
+            // lock the mutex before closing the fd, then unlock
+            if (pthread_mutex_lock(&fileMutex) == 0) {
+                close(filefd);
+                if (pthread_mutex_unlock(&fileMutex) != 0) {
+                    syslog(LOG_USER | LOG_ERR, "Failed to unlock mutex, error = %d", errno);
+                }
             }
             else {
-                if ((returnVal = write(filefd, recvbuf, recsize)) < recsize) {
-                    syslog(LOG_USER | LOG_DEBUG, "Failed to write, error = %d", errno);
-                }
-                
-                // if this is the end of the packet, send the file
-                if (recvbuf[recsize-1] == '\n') {
-                
-                    // send entire file content
-                    if((returnVal = lseek(filefd, 0, SEEK_SET)) != 0) {
-                        syslog(LOG_USER | LOG_DEBUG, 
-                        "Failed to seek, position = %d", returnVal);
-                    }
-                    while ((strsize = read(filefd, sendbuf, BUFF_SIZE)) > 0) {
-                        syslog(LOG_DEBUG, "Read %d bytes", (int)strsize);
-                        send(streamfd, sendbuf, strsize, MSG_DONTWAIT);
-                    }
-                }
-                
-                // continue to receive another packet
-                receiving = true;
+                syslog(LOG_USER | LOG_ERR, "Failed to lock mutex, error = %d", errno);
             }
-        }
-        
-       // close connection and log disconnection
-        if (connected == false) {
-            close(streamfd);
-            // Later: Use getnameinfo() to get address in string form
-            syslog(LOG_USER | LOG_DEBUG, "Closed connection from %d.%d.%d.%d", 
-              (int)connectingaddr.sa_data[2], (int)connectingaddr.sa_data[3], 
-              (int)connectingaddr.sa_data[4], (int)connectingaddr.sa_data[5]); 
+            return returnVal;
         }
     
-        close(filefd);
-    }
-
-    close(socketfd);
+        // create thread and add it to the linked list
+        newThread = malloc(sizeof(struct socketThread));
+        newThread->connectingaddr = connectingaddr;
+        newThread->streamfd = streamfd;
+        newThread->completeFlag = false;
         
-    remove("/var/tmp/aesdsocketdata");
+        pthread_create(&(newThread->pthread), NULL, (void*)manageConnection, newThread);
 
+        SLIST_INSERT_HEAD(&listHead, newThread, next);
+        
+        struct socketThread *item, *tItem;
+            
+        SLIST_FOREACH_SAFE(item, &listHead, next, tItem){
+            if (item->completeFlag) {
+                pthread_join(item->pthread, NULL);
+                SLIST_REMOVE(&listHead, item, socketThread, next);
+                free(item);
 
+            }
+        }
+    
+    }
 }
