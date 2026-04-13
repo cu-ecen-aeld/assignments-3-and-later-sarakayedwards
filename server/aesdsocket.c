@@ -47,24 +47,9 @@ static void signal_handler(int signal_number) {
     if (signal_number == SIGINT) {
         syslog(LOG_USER | LOG_ERR, "Caught signal, exiting");
     }
-    
-    // close open sockets
-    struct socketThread *item;
-    
-    close(filefd);
-    SLIST_FOREACH(item, &listHead, next) close(item->streamfd);
-    close(socketfd);
-    
-    free(tsThread);
-    
-    // delete file
-    remove("/var/tmp/aesdsocketdata");
-    
-    pthread_mutex_destroy(&fileMutex);
-    
+   
     errno = tempErrno;
     
-    exit(EXIT_SUCCESS);
 }
 
 void createDaemon(void) {
@@ -125,9 +110,21 @@ void receiveAndSend(struct socketThread* threadStruct) {
                 syslog(LOG_USER | LOG_DEBUG, "Failed to write, error = %d", errno);
             }
                 
+            // unlock the mutex after access is complete
+            if (pthread_mutex_unlock(&fileMutex) != 0) {
+                syslog(LOG_USER | LOG_ERR, "Failed to unlock mutex, error = %d", errno);
+                exit(EXIT_FAILURE);;
+            }
             // if this is the end of the packet, send the file
             if (recvbuf[recsize-1] == '\n') {
                 
+                // lock the mutex before accessing the file
+                if (pthread_mutex_lock(&fileMutex) != 0) {
+                    syslog(LOG_USER | LOG_ERR, 
+                           "Failed to lock mutex, error = %d", errno);
+                    exit(EXIT_FAILURE);
+                }
+            
                 // send entire file content
                 if((returnVal = lseek(filefd, 0, SEEK_SET)) != 0) {
                     syslog(LOG_USER | LOG_DEBUG, 
@@ -137,13 +134,15 @@ void receiveAndSend(struct socketThread* threadStruct) {
                     syslog(LOG_DEBUG, "Read %d bytes", (int)strsize);
                     send(threadStruct->streamfd, sendbuf, strsize, MSG_DONTWAIT);
                 }
+                
+                // unlock the mutex after access is complete
+                if (pthread_mutex_unlock(&fileMutex) != 0) {
+                    syslog(LOG_USER | LOG_ERR, 
+                           "Failed to unlock mutex, error = %d", errno);
+                    exit(EXIT_FAILURE);;
+                }
             }
             
-            // unlock the mutex after access is complete
-            if (pthread_mutex_unlock(&fileMutex) != 0) {
-                syslog(LOG_USER | LOG_ERR, "Failed to unlock mutex, error = %d", errno);
-                exit(EXIT_FAILURE);;
-            }
         }
     }
 }
@@ -182,6 +181,9 @@ void writeTimestamp(void) {
 
     while (1) {
         
+        // wait 10 seconds
+        sleep(10);
+
         timeStrSize = 0;
         strcpy(timeStr, "");
         strcpy(fullTimeStr, "Timestamp:");
@@ -213,9 +215,6 @@ void writeTimestamp(void) {
             exit(EXIT_FAILURE);
         }
         
-        // wait 10 seconds
-        sleep(10);
-
     }
 }
 
@@ -262,7 +261,9 @@ int main(int argc, char* argv[]) {
     }
 
     // create and open socket
-    if ((socketfd = socket(PF_INET, SOCK_STREAM, 0)) == -1) {
+    if ((socketfd = socket(PF_INET, 
+                           SOCK_STREAM |SOCK_NONBLOCK | SOCK_CLOEXEC, 
+                           0)) == -1) {
         syslog(LOG_USER | LOG_ERR, "Failed to create socket, error = %d", errno);
         return errno;
     }
@@ -336,45 +337,78 @@ int main(int argc, char* argv[]) {
     }
      
     // keep accepting and handling connections until a signal is received
-    while (1) {
+    while (!signalReceived) {
     
-        if ((streamfd = accept(socketfd, &connectingaddr, &sockaddrlength)) == -1) {
-            syslog(LOG_USER | LOG_ERR, "Failed to accept, error = %d", errno);
-            close(socketfd);
+        streamfd = accept(socketfd, 
+                           &connectingaddr, 
+                           &sockaddrlength);
+        if (streamfd == -1) {
+            if ((errno == EAGAIN) || (errno == EWOULDBLOCK)) continue;
+            else { 
             
-            // lock the mutex before closing the fd, then unlock
-            if (pthread_mutex_lock(&fileMutex) == 0) {
-                close(filefd);
-                if (pthread_mutex_unlock(&fileMutex) != 0) {
-                    syslog(LOG_USER | LOG_ERR, "Failed to unlock mutex, error = %d", errno);
+                syslog(LOG_USER | LOG_ERR, "Failed to accept, error = %d", errno);
+                close(socketfd);
+            
+                // lock the mutex before closing the fd, then unlock
+                if (pthread_mutex_lock(&fileMutex) == 0) {
+                    close(filefd);
+                    if (pthread_mutex_unlock(&fileMutex) != 0) {
+                        syslog(LOG_USER | LOG_ERR, 
+                               "Failed to unlock mutex, error = %d", errno);
+                    }
+                }
+                else {
+                    syslog(LOG_USER | LOG_ERR, "Failed to lock mutex, error = %d", errno);
+                }
+                return returnVal;
+            }
+        }
+        else {
+            // create thread and add it to the linked list
+            newThread = malloc(sizeof(struct socketThread));
+            newThread->connectingaddr = connectingaddr;
+            newThread->streamfd = streamfd;
+            newThread->completeFlag = false;
+        
+            pthread_create(&(newThread->pthread), 
+                           NULL, 
+                           (void*)manageConnection, 
+                           newThread);
+
+            SLIST_INSERT_HEAD(&listHead, newThread, next);
+        
+            struct socketThread *item, *tItem;
+            
+            SLIST_FOREACH_SAFE(item, &listHead, next, tItem){
+                if (item->completeFlag) {
+                    pthread_join(item->pthread, NULL);
+                    SLIST_REMOVE(&listHead, item, socketThread, next);
+                    free(item);
                 }
             }
-            else {
-                syslog(LOG_USER | LOG_ERR, "Failed to lock mutex, error = %d", errno);
-            }
-            return returnVal;
         }
-    
-        // create thread and add it to the linked list
-        newThread = malloc(sizeof(struct socketThread));
-        newThread->connectingaddr = connectingaddr;
-        newThread->streamfd = streamfd;
-        newThread->completeFlag = false;
-        
-        pthread_create(&(newThread->pthread), NULL, (void*)manageConnection, newThread);
-
-        SLIST_INSERT_HEAD(&listHead, newThread, next);
-        
-        struct socketThread *item, *tItem;
-            
-        SLIST_FOREACH_SAFE(item, &listHead, next, tItem){
-            if (item->completeFlag) {
-                pthread_join(item->pthread, NULL);
-                SLIST_REMOVE(&listHead, item, socketThread, next);
-                free(item);
-
-            }
-        }
-    
     }
+    
+    // clean up before exiting
+
+    // close open fds and free list memory
+    struct socketThread *item, *tItem;
+    
+    SLIST_FOREACH_SAFE(item, &listHead, next, tItem){
+        close(item->streamfd);
+        SLIST_REMOVE(&listHead, item, socketThread, next);
+        free(item);
+    }
+    
+    close(socketfd);
+    
+    free(tsThread);
+    
+    // delete file
+    close(filefd);
+    remove("/var/tmp/aesdsocketdata");
+    
+    pthread_mutex_destroy(&fileMutex);
+    
+    exit(EXIT_SUCCESS);
 }
