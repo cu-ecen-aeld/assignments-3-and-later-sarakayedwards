@@ -20,7 +20,6 @@
 int signalReceived = 0;
 int socketfd;
 int filefd;
-bool receiving;
 pthread_mutex_t fileMutex;
 pthread_t* tsThread;
 
@@ -95,7 +94,6 @@ void receiveAndSend(struct socketThread* threadStruct) {
         }
         else if (recsize == 0) {
             receiving = false;
-            syslog(LOG_USER | LOG_DEBUG, "Nothing received");
         }
         else {
         
@@ -127,11 +125,10 @@ void receiveAndSend(struct socketThread* threadStruct) {
             
                 // send entire file content
                 if((returnVal = lseek(filefd, 0, SEEK_SET)) != 0) {
-                    syslog(LOG_USER | LOG_DEBUG, 
+                    syslog(LOG_USER | LOG_ERR, 
                     "Failed to seek, position = %d", returnVal);
                 }
                 while ((strsize = read(filefd, sendbuf, BUFF_SIZE)) > 0) {
-                    syslog(LOG_DEBUG, "Read %d bytes", (int)strsize);
                     send(threadStruct->streamfd, sendbuf, strsize, MSG_DONTWAIT);
                 }
                 
@@ -141,8 +138,9 @@ void receiveAndSend(struct socketThread* threadStruct) {
                            "Failed to unlock mutex, error = %d", errno);
                     exit(EXIT_FAILURE);;
                 }
+                
+                receiving = false;
             }
-            
         }
     }
 }
@@ -174,47 +172,40 @@ void writeTimestamp(void) {
     time_t currentTimeEpoch;
     struct tm* currentTimeLocal;
     char timeStr[100];
-    int timeStrSize = 0;
+    int timeStrSize;
     char formatStr[] = "%a, %d %b %Y %T %z"; // RFC 2822-compliant format
-    char fullTimeStr[100] = "Timestamp:";
+    char fullTimeStr[100];
     int returnVal;
 
-    while (1) {
-        
-        // wait 10 seconds
-        sleep(10);
-
-        timeStrSize = 0;
-        strcpy(timeStr, "");
-        strcpy(fullTimeStr, "Timestamp:");
+    timeStrSize = 0;
+    strcpy(timeStr, "");
+    strcpy(fullTimeStr, "timestamp:");
    
-        // get current time
-        currentTimeEpoch = time(NULL);
-        currentTimeLocal = localtime(&currentTimeEpoch);
+    // get current time
+    currentTimeEpoch = time(NULL);
+    currentTimeLocal = localtime(&currentTimeEpoch);
     
-        // format time and append newline
-        timeStrSize = strftime(timeStr, 100, formatStr, currentTimeLocal);
-        strcat(fullTimeStr, timeStr);
-        timeStrSize += 10;
-        fullTimeStr[timeStrSize++] = '\n';
+    // format time and append newline
+    timeStrSize = strftime(timeStr, 100, formatStr, currentTimeLocal);
+    strcat(fullTimeStr, timeStr);
+    timeStrSize += 10; //"timestamp:"
+    fullTimeStr[timeStrSize++] = '\n';
 
-        // lock the mutex before accessing the file
-        if (pthread_mutex_lock(&fileMutex) != 0) {
-            syslog(LOG_USER | LOG_ERR, "Failed to lock mutex, error = %d", errno);
-            exit(EXIT_FAILURE);
-        }
+    // lock the mutex before accessing the file
+    if (pthread_mutex_lock(&fileMutex) != 0) {
+        syslog(LOG_USER | LOG_ERR, "Failed to lock mutex, error = %d", errno);
+        exit(EXIT_FAILURE);
+    }
             
-        // append the timestamp to the file
-        if ((returnVal = write(filefd, fullTimeStr, timeStrSize)) < timeStrSize) {
-            syslog(LOG_USER | LOG_DEBUG, "Failed to write, error = %d", errno);
-        }
-                
-        // unlock the mutex after access is complete
-        if (pthread_mutex_unlock(&fileMutex) != 0) {
-            syslog(LOG_USER | LOG_ERR, "Failed to unlock mutex, error = %d", errno);
-            exit(EXIT_FAILURE);
-        }
-        
+    // append the timestamp to the file
+    if ((returnVal = write(filefd, fullTimeStr, timeStrSize)) < timeStrSize) {
+        syslog(LOG_USER | LOG_ERR, "Failed to write, error = %d", errno);
+    }
+            
+    // unlock the mutex after access is complete
+    if (pthread_mutex_unlock(&fileMutex) != 0) {
+        syslog(LOG_USER | LOG_ERR, "Failed to unlock mutex, error = %d", errno);
+        exit(EXIT_FAILURE);
     }
 }
 
@@ -229,6 +220,7 @@ int main(int argc, char* argv[]) {
     int i;
     bool daemonMode = false;
     int streamfd;
+    time_t nextTime;
     
     // initialize mutex lock for file
     if (pthread_mutex_init(&fileMutex, NULL) != 0) {
@@ -309,10 +301,6 @@ int main(int argc, char* argv[]) {
         return returnVal;
     }
     
-    // start timestamp thread
-    tsThread = malloc(sizeof(pthread_t));
-    pthread_create(tsThread, NULL, (void*)writeTimestamp, NULL);
-    
     // initialize linked list for threads
     struct socketThread* newThread;
     struct slisthead listHead;
@@ -335,32 +323,27 @@ int main(int argc, char* argv[]) {
         }
         return returnVal;
     }
+    
+    // initialize timer for timestamp
+    nextTime = time(NULL) + 10;
      
     // keep accepting and handling connections until a signal is received
     while (!signalReceived) {
     
+        // if it's time, set the new timer and write the current timestamp
+        if (time(NULL) >= nextTime) {
+            nextTime = time(NULL) + 10;
+            writeTimestamp();
+        }
+
         streamfd = accept(socketfd, 
                            &connectingaddr, 
                            &sockaddrlength);
         if (streamfd == -1) {
             if ((errno == EAGAIN) || (errno == EWOULDBLOCK)) continue;
             else { 
-            
                 syslog(LOG_USER | LOG_ERR, "Failed to accept, error = %d", errno);
-                close(socketfd);
-            
-                // lock the mutex before closing the fd, then unlock
-                if (pthread_mutex_lock(&fileMutex) == 0) {
-                    close(filefd);
-                    if (pthread_mutex_unlock(&fileMutex) != 0) {
-                        syslog(LOG_USER | LOG_ERR, 
-                               "Failed to unlock mutex, error = %d", errno);
-                    }
-                }
-                else {
-                    syslog(LOG_USER | LOG_ERR, "Failed to lock mutex, error = %d", errno);
-                }
-                return returnVal;
+                break;
             }
         }
         else {
@@ -402,13 +385,10 @@ int main(int argc, char* argv[]) {
     
     close(socketfd);
     
-    free(tsThread);
-    
     // delete file
     close(filefd);
     remove("/var/tmp/aesdsocketdata");
     
     pthread_mutex_destroy(&fileMutex);
-    
-    exit(EXIT_SUCCESS);
+
 }
