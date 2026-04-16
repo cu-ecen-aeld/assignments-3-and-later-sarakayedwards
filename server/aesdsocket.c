@@ -53,6 +53,7 @@ static void signal_handler(int signal_number) {
 
 void createDaemon(void) {
     pid_t pid;
+    int rv;
     
     pid = fork();
     if (pid < 0) {
@@ -69,12 +70,12 @@ void createDaemon(void) {
     umask(0);
     
     // change to parent directory
-    chdir("/");
+    if ((rv = chdir("/")) == -1) syslog(LOG_USER | LOG_ERR, "Failed to chdir");
     
     // redirect standard input and output
     open("/dev/null", O_RDWR);
-    dup(0);
-    dup(0);
+    if ((rv = dup(0)) == -1) syslog(LOG_USER | LOG_ERR, "Failed to dup");
+    if ((rv = dup(0)) == -1) syslog(LOG_USER | LOG_ERR, "Failed to dup");
 }
 
 void receiveAndSend(struct socketThread* threadStruct) {
