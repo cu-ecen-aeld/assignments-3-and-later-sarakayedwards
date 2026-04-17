@@ -12,6 +12,7 @@
 #include <linux/string.h>
 #else
 #include <string.h>
+#include <stdio.h>
 #endif
 
 #include "aesd-circular-buffer.h"
@@ -29,10 +30,29 @@
 struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct aesd_circular_buffer *buffer,
             size_t char_offset, size_t *entry_offset_byte_rtn )
 {
-    /**
-    * TODO: implement per description
-    */
-    return NULL;
+    size_t count = 0;
+    uint8_t next = buffer->out_offs;
+    
+    // avoid accessing NULL pointers
+    if ((buffer == NULL) || (entry_offset_byte_rtn == NULL)) return NULL;
+
+    // if the buffer is empty, return NULL
+    if ((buffer->in_offs == buffer->out_offs) && (!buffer->full)) return NULL;
+    
+    while (((count + (buffer->entry[next]).size) - 1) < char_offset) {
+    
+        count = count + (buffer->entry[next]).size;
+        next = (next + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
+
+        // if we've reached the last entry in use, return NULL
+        if (next == (buffer->in_offs)) return NULL;
+    }    
+    
+    // we've located the entry
+    *(entry_offset_byte_rtn) = char_offset - count;
+
+    return &(buffer->entry[next]);
+
 }
 
 /**
@@ -44,10 +64,27 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
 */
 void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const struct aesd_buffer_entry *add_entry)
 {
-    /**
-    * TODO: implement per description
-    */
+    // avoid accessing NULL pointers
+    if ((buffer == NULL) || (add_entry == NULL)) return;
+
+    (buffer->entry[buffer->in_offs]).buffptr = add_entry->buffptr;
+    
+    (buffer->entry[buffer->in_offs]).size = add_entry->size;
+
+    // if buffer was already full, increment both offsets
+    if (buffer->full) {
+        buffer->in_offs = (buffer->in_offs + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
+        buffer->out_offs = buffer->in_offs;
+    }
+    else {
+        buffer->in_offs = (buffer->in_offs + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
+        
+        // check if it's full now
+        if (buffer->in_offs == buffer->out_offs) buffer->full = true;
+    }
+
 }
+    
 
 /**
 * Initializes the circular buffer described by @param buffer to an empty struct
