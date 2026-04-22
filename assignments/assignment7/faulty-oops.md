@@ -1,9 +1,9 @@
 # Kernel oops Analysis
 ## Module: faulty
 
-### The module faulty was purposely included to demonstrate an error caused by accessing a null pointer. The following shows the invocation of the module and the resulting command line output.
+The module faulty was purposely included to demonstrate an error caused by accessing a null pointer. The following shows the invocation of the module and the resulting command line output.
 
-...
+```
 \# echo "hello_world" > /dev/faulty
 Unable to handle kernel NULL pointer dereference at virtual address 0000000000000000
 Mem abort info:
@@ -47,6 +47,6 @@ Call trace:
  el0t_64_sync+0x18c/0x190
 Code: d2800001 d2800000 d503233f d50323bf (b900003f) 
 ---[ end trace 0000000000000000 ]---
-...
+```
 
-### According to the call stack trace, the bad read was initiated 0x10 bytes into the function faulty_write(). 
+According to the call stack trace, the bad read was initiated 0x10 bytes into the function faulty_write(). 
