@@ -17,6 +17,8 @@
 
 #define BUFF_SIZE 4096
 
+#define TIMESTAMP_ENABLED 0  // Disabled. To enable timestamp, set to 1
+
 int signalReceived = 0;
 int socketfd;
 int filefd;
@@ -331,12 +333,16 @@ int main(int argc, char* argv[]) {
     // keep accepting and handling connections until a signal is received
     while (!signalReceived) {
     
-        // if it's time, set the new timer and write the current timestamp
-        if (time(NULL) >= nextTime) {
-            nextTime = time(NULL) + 10;
-            writeTimestamp();
+    
+        if (TIMESTAMP_ENABLED) {
+        
+            // if it's time, set the new timer and write the current timestamp
+            if (time(NULL) >= nextTime) {
+                nextTime = time(NULL) + 10;
+                writeTimestamp();
+            }
         }
-
+        
         streamfd = accept(socketfd, 
                            &connectingaddr, 
                            &sockaddrlength);
