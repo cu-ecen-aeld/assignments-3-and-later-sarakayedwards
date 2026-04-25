@@ -33,9 +33,10 @@ DEFINE_MUTEX(aesd_mutex);
 
 int aesd_open(struct inode *inode, struct file *filp)
 {
+    struct aesd_dev* dev;
+
     PDEBUG("open");
          
-    struct aesd_dev* dev;
     dev = container_of(inode->i_cdev, struct aesd_dev, cdev);
     filp->private_data = dev;
 
@@ -44,14 +45,13 @@ int aesd_open(struct inode *inode, struct file *filp)
 
 int aesd_release(struct inode *inode, struct file *filp)
 {
+    struct aesd_dev* dev = filp->private_data;
+    struct aesd_buffer_entry* entryptr;
+    int index;
+
     PDEBUG("release");
     
-    struct aesd_dev* dev = filp->private_data;
-    
     // free the memory used in the circular buffer
-    void* entryptr;
-    int index;
-    
     AESD_CIRCULAR_BUFFER_FOREACH(entryptr, &(dev->buff), index) {
         kfree(entryptr->buffptr);
     }
@@ -77,8 +77,8 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     retEntry = aesd_circular_buffer_find_entry_offset_for_fpos(dev->buff,
             (size_t)(*f_pos), &retOffset );
             
-    bytesRem = dev->buff.entry[retEntry].size - retOffset;
-    retval = copy_to_user(buf, &(dev->buff.entry[retEntry].buffptr[retOffset]), bytesRem);
+    bytesRem = retEntry->size - retOffset;
+    retval = copy_to_user(buf, &(retEntry->buffptr[retOffset]), bytesRem);
 
     mutex_unlock(&aesd_mutex);
      
@@ -90,14 +90,14 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 {
     int retval = -ENOMEM;
     char* writeBuff;
-    char* memToFree;
+    const char* memToFree;
     struct aesd_dev* dev = filp->private_data;
     struct aesd_buffer_entry newEntry;
     
     PDEBUG("write %zu bytes with offset %lld",count,*f_pos);
 
     // copy the buffer into our holding buffer
-    if (retval = copy_from_user(&(dev->holdingBuff[dev->holdingBuffSize]), buf, count) != 0) {
+    if ((retval = copy_from_user(&(dev->holdingBuff[dev->holdingBuffSize]), buf, count)) != 0) {
         return retval;
     }
     
