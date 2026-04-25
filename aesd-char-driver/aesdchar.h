@@ -9,8 +9,9 @@
 #define AESD_CHAR_DRIVER_AESDCHAR_H_
 
 #include "aesd-circular-buffer.h"
+#include <linux/mutex.h>
 
-define AESD_DEBUG 1  //Remove comment on this line to enable debug
+#define AESD_DEBUG 1  //Remove comment on this line to enable debug
 
 #undef PDEBUG             /* undef it, just in case */
 #ifdef AESD_DEBUG
@@ -32,9 +33,6 @@ struct aesd_dev
     char holdingBuff[KMALLOC_MAX_SIZE];
     int holdingBuffSize;  // how many characters we are currently holding
     struct aesd_circular_buffer buff;
-    pthread_mutex_t lock;
-    pthread_mutexattr_t lockAttr;
-
 };
 
 
