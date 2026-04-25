@@ -20,7 +20,7 @@
 #include <linux/string.h> 
 #include <linux/mutex.h>
 #include "aesdchar.h"
-#include "aesd_circular_buffer.h"
+#include "aesd-circular-buffer.h"
 int aesd_major =   0; // use dynamic major
 int aesd_minor =   0;
 
