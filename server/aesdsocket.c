@@ -17,13 +17,19 @@
 
 #define BUFF_SIZE 4096
 
-#define TIMESTAMP_ENABLED 0  // Disabled. To enable timestamp, set to 1
-
 int signalReceived = 0;
 int socketfd;
-int filefd;
+int filefd = -1;
 pthread_mutex_t fileMutex;
 pthread_t* tsThread;
+
+#ifdef USE_AESD_CHAR_DEVICE
+  #define DEV_OUT "/dev/aesdchar"
+  #define TIMESTAMP_ENABLED 0  
+#else
+  #define DEV_OUT "/var/tmp/aesdsocketdata"
+  #define TIMESTAMP_ENABLED 1  
+#endif
 
 struct socketThread {
     pthread_t pthread;
@@ -100,31 +106,48 @@ void receiveAndSend(struct socketThread* threadStruct) {
         }
         else {
         
+          #ifndef USE_AESD_CHAR_DEVICE
             // lock the mutex before accessing the file
             if (pthread_mutex_lock(&fileMutex) != 0) {
                 syslog(LOG_USER | LOG_ERR, "Failed to lock mutex, error = %d", errno);
                 exit(EXIT_FAILURE);
             }
+          #endif
             
+            // If it's not open, open the file, creating if it doesn't exist
+            if (filefd <= 0) {
+                if ((filefd = open(DEV_OUT, O_RDWR|O_CREAT|O_APPEND|O_CLOEXEC, 
+                                            S_IRWXU|S_IRWXG|S_IRWXO)) == -1) {
+                    syslog(LOG_USER | LOG_ERR, "Failed to open file, error = %d", errno);
+                    close(socketfd);
+                    return;
+                }
+            }
+
             // write what was received to the file (append)
             if ((returnVal = write(filefd, recvbuf, recsize)) < recsize) {
                 syslog(LOG_USER | LOG_DEBUG, "Failed to write, error = %d", errno);
             }
                 
+          #ifndef USE_AESD_CHAR_DEVICE
             // unlock the mutex after access is complete
             if (pthread_mutex_unlock(&fileMutex) != 0) {
                 syslog(LOG_USER | LOG_ERR, "Failed to unlock mutex, error = %d", errno);
                 exit(EXIT_FAILURE);;
             }
+          #endif
+        
+            
             // if this is the end of the packet, send the file
             if (recvbuf[recsize-1] == '\n') {
-                
+              #ifndef USE_AESD_CHAR_DEVICE
                 // lock the mutex before accessing the file
                 if (pthread_mutex_lock(&fileMutex) != 0) {
                     syslog(LOG_USER | LOG_ERR, 
                            "Failed to lock mutex, error = %d", errno);
                     exit(EXIT_FAILURE);
                 }
+              #endif
             
                 // send entire file content
                 if((returnVal = lseek(filefd, 0, SEEK_SET)) != 0) {
@@ -134,13 +157,15 @@ void receiveAndSend(struct socketThread* threadStruct) {
                 while ((strsize = read(filefd, sendbuf, BUFF_SIZE)) > 0) {
                     send(threadStruct->streamfd, sendbuf, strsize, MSG_DONTWAIT);
                 }
-                
+
+              #ifndef USE_AESD_CHAR_DEVICE
                 // unlock the mutex after access is complete
                 if (pthread_mutex_unlock(&fileMutex) != 0) {
                     syslog(LOG_USER | LOG_ERR, 
                            "Failed to unlock mutex, error = %d", errno);
                     exit(EXIT_FAILURE);;
                 }
+              #endif
                 
                 receiving = false;
             }
@@ -194,22 +219,28 @@ void writeTimestamp(void) {
     timeStrSize += 10; //"timestamp:"
     fullTimeStr[timeStrSize++] = '\n';
 
+  #ifndef USE_AESD_CHAR_DEVICE
     // lock the mutex before accessing the file
     if (pthread_mutex_lock(&fileMutex) != 0) {
         syslog(LOG_USER | LOG_ERR, "Failed to lock mutex, error = %d", errno);
         exit(EXIT_FAILURE);
     }
+  #endif
             
-    // append the timestamp to the file
-    if ((returnVal = write(filefd, fullTimeStr, timeStrSize)) < timeStrSize) {
-        syslog(LOG_USER | LOG_ERR, "Failed to write, error = %d", errno);
+    // append the timestamp to the file if the file is open
+    if (filefd > 0) {
+        if ((returnVal = write(filefd, fullTimeStr, timeStrSize)) < timeStrSize) {
+            syslog(LOG_USER | LOG_ERR, "Failed to write, error = %d", errno);
+        }
     }
-            
+        
+  #ifndef USE_AESD_CHAR_DEVICE          
     // unlock the mutex after access is complete
     if (pthread_mutex_unlock(&fileMutex) != 0) {
         syslog(LOG_USER | LOG_ERR, "Failed to unlock mutex, error = %d", errno);
         exit(EXIT_FAILURE);
     }
+  #endif
 }
 
 int main(int argc, char* argv[]) {
@@ -225,11 +256,13 @@ int main(int argc, char* argv[]) {
     int streamfd;
     time_t nextTime;
     
+  #ifndef USE_AESD_CHAR_DEVICE
     // initialize mutex lock for file
     if (pthread_mutex_init(&fileMutex, NULL) != 0) {
         syslog(LOG_USER | LOG_ERR, "Failed to init mutex, error = %d", errno);
         return errno;
     }
+  #endif
 
     struct sigaction new_action;
 
@@ -296,14 +329,6 @@ int main(int argc, char* argv[]) {
     // free memory
     freeaddrinfo(mysockaddr);
     
-    // Open the file, creating if it doesn't exist
-    if ((filefd = open("/var/tmp/aesdsocketdata", O_RDWR|O_CREAT|O_APPEND|O_CLOEXEC, 
-                                              S_IRWXU|S_IRWXG|S_IRWXO)) == -1) {
-        syslog(LOG_USER | LOG_ERR, "Failed to open file, error = %d", errno);
-        close(socketfd);
-        return returnVal;
-    }
-    
     // initialize linked list for threads
     struct socketThread* newThread;
     struct slisthead listHead;
@@ -314,9 +339,12 @@ int main(int argc, char* argv[]) {
         syslog(LOG_USER | LOG_ERR, "Failed to listen, error = %d", errno);
         close(socketfd);
         
+  #ifndef USE_AESD_CHAR_DEVICE        
         // lock the mutex before closing the fd, then unlock
         if (pthread_mutex_lock(&fileMutex) == 0) {
+  #endif        
             close(filefd);
+  #ifndef USE_AESD_CHAR_DEVICE        
             if (pthread_mutex_unlock(&fileMutex) != 0) {
                 syslog(LOG_USER | LOG_ERR, "Failed to unlock mutex, error = %d", errno);
             }
@@ -325,6 +353,8 @@ int main(int argc, char* argv[]) {
             syslog(LOG_USER | LOG_ERR, "Failed to lock mutex, error = %d", errno);
         }
         return returnVal;
+  #endif
+        
     }
     
     // initialize timer for timestamp
@@ -334,15 +364,14 @@ int main(int argc, char* argv[]) {
     while (!signalReceived) {
     
     
-        if (TIMESTAMP_ENABLED) {
-        
-            // if it's time, set the new timer and write the current timestamp
-            if (time(NULL) >= nextTime) {
-                nextTime = time(NULL) + 10;
-                writeTimestamp();
-            }
+      #ifdef TIMESTAMP_ENABLED
+        // if it's time, set the new timer and write the current timestamp
+        if (time(NULL) >= nextTime) {
+            nextTime = time(NULL) + 10;
+            writeTimestamp();
         }
-        
+      #endif
+            
         streamfd = accept(socketfd, 
                            &connectingaddr, 
                            &sockaddrlength);
@@ -392,10 +421,12 @@ int main(int argc, char* argv[]) {
     
     close(socketfd);
     
-    // delete file
+    // close device
     close(filefd);
-    remove("/var/tmp/aesdsocketdata");
     
+  #ifndef USE_AESD_CHAR_DEVICE
+    remove("/var/tmp/aesdsocketdata");
     pthread_mutex_destroy(&fileMutex);
+  #endif
 
 }
