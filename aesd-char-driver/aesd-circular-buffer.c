@@ -65,7 +65,7 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
 */
 const char* aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const struct aesd_buffer_entry *add_entry)
 {
-    char* retVal;
+    const char* retVal;
     
     // avoid accessing NULL pointers
     if ((buffer == NULL) || (add_entry == NULL)) return NULL;

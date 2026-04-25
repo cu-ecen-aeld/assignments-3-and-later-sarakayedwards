@@ -35,7 +35,7 @@ int aesd_open(struct inode *inode, struct file *filp)
 {
     PDEBUG("open");
          
-    void* dev;
+    struct aesd_dev* dev;
     dev = container_of(inode->i_cdev, struct aesd_dev, cdev);
     filp->private_data = dev;
 
@@ -46,7 +46,7 @@ int aesd_release(struct inode *inode, struct file *filp)
 {
     PDEBUG("release");
     
-    void* dev = filp->private_data;
+    struct aesd_dev* dev = filp->private_data;
     
     // free the memory used in the circular buffer
     void* entryptr;
@@ -63,7 +63,7 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
                 loff_t *f_pos)
 {
     ssize_t retval = 0;
-    void* dev = filp->private_data;
+    struct aesd_dev* dev = filp->private_data;
     struct aesd_buffer_entry* retEntry;
     size_t retOffset;
     int bytesRem;
@@ -75,10 +75,10 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     if ((retval = mutex_lock_interruptible(&aesd_mutex)) != 0) return retval;
 
     retEntry = aesd_circular_buffer_find_entry_offset_for_fpos(dev->buff,
-            (size_t)(*f_pos), size_t *retOffset );
+            (size_t)(*f_pos), &retOffset );
             
     bytesRem = dev->buff.entry[retEntry].size - retOffset;
-    retVal = copy_to_user(buf, &(dev->buff.entry[retEntry].buffptr[retOffset]), bytesRem);
+    retval = copy_to_user(buf, &(dev->buff.entry[retEntry].buffptr[retOffset]), bytesRem);
 
     mutex_unlock(&aesd_mutex);
      
@@ -91,7 +91,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     int retval = -ENOMEM;
     char* writeBuff;
     char* memToFree;
-    void* dev = filp->private_data;
+    struct aesd_dev* dev = filp->private_data;
     struct aesd_buffer_entry newEntry;
     
     PDEBUG("write %zu bytes with offset %lld",count,*f_pos);
@@ -109,7 +109,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         writeBuff = kmalloc(dev->holdingBuffSize, GFP_KERNEL);
 
         strncpy(writeBuff, dev->holdingBuff, dev->holdingBuffSize);
-        newEntry.buffPtr = writeBuff;
+        newEntry.buffptr = writeBuff;
         newEntry.size = dev->holdingBuffSize;
 
         // get the semaphore before we write to the buffer
@@ -170,7 +170,7 @@ int aesd_init_module(void)
     aesd_device.holdingBuffSize = 0; 
     aesd_circular_buffer_init(&(aesd_device.buff));
     
-    // mutex is initialized upon static declaration
+    // mutex is initialized upon static declaration; nothing to do here
 
     result = aesd_setup_cdev(&aesd_device);
 
