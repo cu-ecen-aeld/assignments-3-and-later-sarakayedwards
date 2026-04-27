@@ -51,11 +51,6 @@ int aesd_release(struct inode *inode, struct file *filp)
 
     PDEBUG("release");
     
-    // free the memory used in the circular buffer
-    AESD_CIRCULAR_BUFFER_FOREACH(entryptr, &(dev->buff), index) {
-        kfree(entryptr->buffptr);
-    }
-    
     return 0;
 }
 
@@ -187,6 +182,11 @@ void aesd_cleanup_module(void)
 
     // kfree(dev); if using kalloc
 
+    // free the memory used in the circular buffer
+    AESD_CIRCULAR_BUFFER_FOREACH(entryptr, &(aesd_device.buff), index) {
+        kfree(entryptr->buffptr);
+    }
+    
     cdev_del(&aesd_device.cdev);
 
     unregister_chrdev_region(devno, 1);

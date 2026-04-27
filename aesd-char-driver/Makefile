@@ -27,4 +27,7 @@ endif
 
 clean:
 	rm -rf *.o *~ core .depend .*.cmd *.ko *.mod.c .tmp_versions
+	
+native:
+	$(CC) $(CFLAGS) $(INCLUDES) main.c aesd-circular-buffer.c -o aesdchar
 
