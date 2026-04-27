@@ -47,7 +47,6 @@ int aesd_release(struct inode *inode, struct file *filp)
 {
     struct aesd_dev* dev = filp->private_data;
     struct aesd_buffer_entry* entryptr;
-    int index;
 
     PDEBUG("release");
     
@@ -179,6 +178,7 @@ int aesd_init_module(void)
 void aesd_cleanup_module(void)
 {
     dev_t devno = MKDEV(aesd_major, aesd_minor);
+    int index;
 
     // kfree(dev); if using kalloc
 
