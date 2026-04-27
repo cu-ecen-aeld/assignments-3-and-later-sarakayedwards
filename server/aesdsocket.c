@@ -98,11 +98,12 @@ void receiveAndSend(struct socketThread* threadStruct) {
     
         // receive data, appending to file
         if ((recsize = recv(threadStruct->streamfd, recvbuf, BUFF_SIZE, 0)) == -1) {
-            syslog(LOG_USER | LOG_DEBUG, "Failed to receive, error = %d", errno);
+            syslog(LOG_USER | LOG_DEBUG, "Error from recv, error = %d", errno);
             receiving = false;
         }
         else if (recsize == 0) {
-            receiving = false;
+        //    receiving = false;
+            receiving = true;
         }
         else {
         
@@ -167,7 +168,7 @@ void receiveAndSend(struct socketThread* threadStruct) {
                 }
               #endif
                 
-                receiving = false;
+                //receiving = false;
             }
         }
     }
