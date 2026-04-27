@@ -25,10 +25,10 @@ pthread_t* tsThread;
 
 #ifdef USE_AESD_CHAR_DEVICE
   #define DEV_OUT "/dev/aesdchar"
-  #define TIMESTAMP_ENABLED 0  
+  #undef TIMESTAMP_ENABLED
 #else
   #define DEV_OUT "/var/tmp/aesdsocketdata"
-  #define TIMESTAMP_ENABLED 1  
+  #undef TIMESTAMP_ENABLED
 #endif
 
 struct socketThread {
@@ -187,6 +187,7 @@ void manageConnection(struct socketThread* threadStruct) {
         
     // close connection and log disconnection
     threadStruct->completeFlag = true;
+    syslog(LOG_USER | LOG_DEBUG, "set complete flag to true");
     close(threadStruct->streamfd);
     // Later: Use getnameinfo() to get address in string form
     syslog(LOG_USER | LOG_DEBUG, "Closed connection from %d.%d.%d.%d", 
@@ -254,7 +255,10 @@ int main(int argc, char* argv[]) {
     int i;
     bool daemonMode = false;
     int streamfd;
+    
+  #ifdef TIMESTAMP_ENABLED
     time_t nextTime;
+  #endif
     
   #ifndef USE_AESD_CHAR_DEVICE
     // initialize mutex lock for file
@@ -357,8 +361,10 @@ int main(int argc, char* argv[]) {
         
     }
     
+  #ifdef TIMESTAMP_ENABLED
     // initialize timer for timestamp
     nextTime = time(NULL) + 10;
+  #endif
      
     // keep accepting and handling connections until a signal is received
     while (!signalReceived) {
