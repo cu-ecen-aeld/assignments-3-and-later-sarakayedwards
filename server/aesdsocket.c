@@ -97,8 +97,17 @@ void receiveAndSend(struct socketThread* threadStruct) {
     
         // receive data, appending to file
         if ((recsize = recv(threadStruct->streamfd, recvbuf, BUFF_SIZE, 0)) == -1) {
-            syslog(LOG_USER | LOG_DEBUG, "Error from recv, error = %d", errno);
+            if ((errno == EAGAIN) || (errno == EWOULDBLOCK) || (errno == EINTR)) continue;
+            else {
+                syslog(LOG_USER | LOG_DEBUG, "Error from recv, error = %d", errno);
+                return;
+            }
+        }
+        else if (recsize == 0) {
+            // the connection is closed
+            syslog(LOG_USER | LOG_DEBUG, "Connection has been closed");
             return;
+           
         }
         else if (recsize > 0) {
         
