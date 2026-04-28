@@ -59,6 +59,7 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     struct aesd_buffer_entry* retEntry;
     size_t retOffset;
     int bytesRem;
+    int bytesNotCopied;
     
     PDEBUG("read %zu bytes with offset %lld",count,*f_pos);
 
@@ -70,9 +71,11 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
             (size_t)(*f_pos), &retOffset );
             
     bytesRem = retEntry->size - retOffset;
-    retval = copy_to_user(buf, &(retEntry->buffptr[retOffset]), bytesRem);
+    bytesNotCopied = copy_to_user(buf, &(retEntry->buffptr[retOffset]), bytesRem);
 
     mutex_unlock(&aesd_mutex);
+    
+    retval = bytesRem - bytesNotCopied;
      
     return retval;
 }
