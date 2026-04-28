@@ -92,20 +92,15 @@ void receiveAndSend(struct socketThread* threadStruct) {
     char sendbuf[BUFF_SIZE];
     size_t strsize;
     int recsize;
-    bool receiving = true;
 
-    while (receiving) {
+    while (!signalReceived) {
     
         // receive data, appending to file
         if ((recsize = recv(threadStruct->streamfd, recvbuf, BUFF_SIZE, 0)) == -1) {
             syslog(LOG_USER | LOG_DEBUG, "Error from recv, error = %d", errno);
-            receiving = false;
+            return;
         }
-        else if (recsize == 0) {
-        //    receiving = false;
-            receiving = true;
-        }
-        else {
+        else if (recsize > 0) {
         
           #ifndef USE_AESD_CHAR_DEVICE
             // lock the mutex before accessing the file
@@ -117,10 +112,15 @@ void receiveAndSend(struct socketThread* threadStruct) {
             
             // If it's not open, open the file, creating if it doesn't exist
             if (filefd <= 0) {
+
+              #ifndef USE_AESD_CHAR_DEVICE
+                // remove it if it exists
+                remove("/var/tmp/aesdsocketdata");
+              #endif
+            
                 if ((filefd = open(DEV_OUT, O_RDWR|O_CREAT|O_APPEND|O_CLOEXEC, 
                                             S_IRWXU|S_IRWXG|S_IRWXO)) == -1) {
                     syslog(LOG_USER | LOG_ERR, "Failed to open file, error = %d", errno);
-                    close(socketfd);
                     return;
                 }
             }
@@ -168,7 +168,6 @@ void receiveAndSend(struct socketThread* threadStruct) {
                 }
               #endif
                 
-                //receiving = false;
             }
         }
     }
