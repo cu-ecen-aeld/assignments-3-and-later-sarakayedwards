@@ -187,7 +187,6 @@ void manageConnection(struct socketThread* threadStruct) {
         
     // close connection and log disconnection
     threadStruct->completeFlag = true;
-    syslog(LOG_USER | LOG_DEBUG, "set complete flag to true");
     close(threadStruct->streamfd);
     // Later: Use getnameinfo() to get address in string form
     syslog(LOG_USER | LOG_DEBUG, "Closed connection from %d.%d.%d.%d", 
@@ -409,6 +408,7 @@ int main(int argc, char* argv[]) {
                     pthread_join(item->pthread, NULL);
                     SLIST_REMOVE(&listHead, item, socketThread, next);
                     free(item);
+                    item = NULL;
                 }
             }
         }
@@ -421,6 +421,7 @@ int main(int argc, char* argv[]) {
     
     SLIST_FOREACH_SAFE(item, &listHead, next, tItem){
         close(item->streamfd);
+        pthread_join(item->pthread, NULL);
         SLIST_REMOVE(&listHead, item, socketThread, next);
         free(item);
     }
