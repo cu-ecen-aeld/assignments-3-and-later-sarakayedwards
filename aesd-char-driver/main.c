@@ -112,7 +112,10 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         newEntry.size = dev->holdingBuffSize;
 
         // get the semaphore before we write to the buffer
-        if ((retval = mutex_lock_interruptible(&aesd_mutex)) != 0) return (ssize_t)retval;
+        if ((retval = mutex_lock_interruptible(&aesd_mutex)) == -EINTR) {
+            kfree(writeBuff);
+            return (ssize_t)(-ERESTARTSYS);
+        }
     
         memToFree = aesd_circular_buffer_add_entry(&(dev->buff), &newEntry);
         
