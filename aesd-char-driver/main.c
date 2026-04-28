@@ -85,15 +85,14 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     const char* memToFree;
     struct aesd_dev* dev = filp->private_data;
     struct aesd_buffer_entry newEntry;
+    int bytesNotCopied;
     
     PDEBUG("write %zu bytes with offset %lld",count,*f_pos);
 
     // copy the buffer into our holding buffer
-    if ((retval = copy_from_user(&(dev->holdingBuff[dev->holdingBuffSize]), buf, count)) != 0) {
-        return retval;
-    }
+    bytesNotCopied = copy_from_user(&(dev->holdingBuff[dev->holdingBuffSize]), buf, count);
     
-    dev->holdingBuffSize += count;
+    dev->holdingBuffSize += count - bytesNotCopied;
     
     // if this write completes a command, do the write
     if (dev->holdingBuff[dev->holdingBuffSize - 1] == '\n') {
@@ -118,7 +117,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         dev->holdingBuffSize = 0;
     }
 
-    return (ssize_t)retval;
+    return (ssize_t)(count - bytesNotCopied);
 }
 struct file_operations aesd_fops = {
     .owner =    THIS_MODULE,
