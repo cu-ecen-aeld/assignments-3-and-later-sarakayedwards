@@ -125,7 +125,7 @@ void receiveAndSend(struct socketThread* threadStruct) {
             if (recvbuf[recvbufsize-1] == '\n') {
 
                 // see if this is a special command
-                if ((sscanf(recvbuf, "AESDCHAR_IOCSEEKTO:%d:%d", x, y) == 2) {
+                if (sscanf(recvbuf, "AESDCHAR_IOCSEEKTO:%d:%d", x, y) == 2) {
                 
                     syslog(LOG_USER | LOG_DEBUG, "special command handling");
                     seekto.write_cmd = x;
