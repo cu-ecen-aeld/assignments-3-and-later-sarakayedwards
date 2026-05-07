@@ -21,6 +21,7 @@
 #include <linux/mutex.h>
 #include "aesdchar.h"
 #include "aesd-circular-buffer.h"
+#include "aesd-ioctl.h"
 int aesd_major =   0; // use dynamic major
 int aesd_minor =   0;
 
@@ -111,6 +112,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         strncpy(writeBuff, dev->holdingBuff, dev->holdingBuffSize);
         newEntry.buffptr = writeBuff;
         newEntry.size = dev->holdingBuffSize;
+        *f_pos = *f_pos + dev->holdingBuffSize;
 
         // get the semaphore before we write to the buffer
         if ((retval = mutex_lock_interruptible(&aesd_mutex)) == -EINTR) {
@@ -131,12 +133,78 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 
     return (ssize_t)(count - bytesNotCopied);
 }
+
+loff_t aesd_llseek(struct file *filp, loff_t offset, int whence){
+    //aesd_buffer_entry* entry;
+    //size_t = retByteOffset;
+    struct aesd_dev* dev = filp->private_data;
+    loff_t newOffset;
+    
+    PDEBUG("seek %d bytes from %lld (0=SET,1=CUR,2=END)", offset, whence);
+
+    // if offset is more than we have stored
+    if (offset > dev->buff.size) return -EINVAL;
+
+    mutex_lock(&aesd_lock);
+    
+    switch (whence) {
+        case SEEK_SET:
+            //entry = aesd_circular_buffer_find_entry_offset_for_fpos
+            //           (dev->buff.buffptr, offset, &retByteOffset);
+            
+            // set the position to the input offset
+            newOffset = offset;
+            break;
+            
+        case SEEK_CUR:
+            //entry = aesd_circular_buffer_find_entry_offset_for_fpos
+            //           (dev->buff.buffptr, filp->fpos + offset, &retByteOffset);
+            
+            //set the position to the current position + the input offset
+            newOffset = filp->fpos + offset;
+            
+            break;
+            
+        case SEEK_END:
+
+            //set the position to the current position + the input offset
+            newOffset = filp->fpos - offset;
+            
+            break;
+    }
+
+    // error if the new position is outside the file
+    if ((newOffset > dev->buff.size) || (newOffset < 0)) (newOffset = -EINVAL);
+    else filp->fpos = newOffset;
+
+    mutex_unlock(&aesd_lock);
+            
+    return newOffset;
+}
+
+long aesd_ioctl(struct file *filp, unsigned int cmd, unsigned long arg) {
+    
+    struct aesd_seekto seekto;
+    long retval;
+
+    switch (cmd) {
+    
+        case AESDCHAR_IOCSEEKTO:
+            retval = aesd_llseek(filp, seekto.writecmd, seekto.write_cmd_offset);       
+            return retval;
+            break;
+            
+    }
+}
+
 struct file_operations aesd_fops = {
-    .owner =    THIS_MODULE,
-    .read =     aesd_read,
-    .write =    aesd_write,
-    .open =     aesd_open,
-    .release =  aesd_release,
+    .owner =          THIS_MODULE,
+    .read =           aesd_read,
+    .write =          aesd_write,
+    .open =           aesd_open,
+    .release =        aesd_release,
+    .llseek =         aesd_llseek,
+    .unlocked_ioctl = aesd_ioctl,
 };
 
 static int aesd_setup_cdev(struct aesd_dev *dev)

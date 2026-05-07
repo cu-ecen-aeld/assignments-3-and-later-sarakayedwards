@@ -11,6 +11,10 @@ endif
 
 EXTRA_CFLAGS += $(DEBFLAGS)
 
+CFLAGS += -I"/usr/src/linux-hwe-6.8-headers-6.8.0-40/include"
+CFLAGS += -I"/usr/src/linux-hwe-6.8-headers-6.8.0-40/arch/arm64/include"
+
+
 ifneq ($(KERNELRELEASE),)
 # call from kernel build system
 obj-m	:= aesdchar.o

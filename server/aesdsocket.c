@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include "queue.h"
 #include <pthread.h>
+#include "../aesd-char-driver/aesd_ioctl.h"
 
 
 #define BUFF_SIZE 4096
@@ -89,14 +90,20 @@ void createDaemon(void) {
 void receiveAndSend(struct socketThread* threadStruct) {
     int returnVal;
     char recvbuf[BUFF_SIZE];
+    int recvbufsize = 0;
     char sendbuf[BUFF_SIZE];
     size_t strsize;
     int recsize;
+    struct aesd_seekto seekto;
+    int x,y;
+    int ioctlretval;
 
     while (!signalReceived) {
     
         // receive data, appending to file
-        if ((recsize = recv(threadStruct->streamfd, recvbuf, BUFF_SIZE, 0)) == -1) {
+        if ((recsize = recv(threadStruct->streamfd, 
+                            &recvbuf[recvbufsize], 
+                            BUFF_SIZE - recvbufsize, 0)) == -1) {
             if ((errno == EAGAIN) || (errno == EWOULDBLOCK) || (errno == EINTR)) continue;
             else {
                 syslog(LOG_USER | LOG_DEBUG, "Error from recv, error = %d", errno);
@@ -111,45 +118,63 @@ void receiveAndSend(struct socketThread* threadStruct) {
         }
         else if (recsize > 0) {
         
-          #ifndef USE_AESD_CHAR_DEVICE
-            // lock the mutex before accessing the file
-            if (pthread_mutex_lock(&fileMutex) != 0) {
-                syslog(LOG_USER | LOG_ERR, "Failed to lock mutex, error = %d", errno);
-                exit(EXIT_FAILURE);
-            }
-          #endif
-            
-            // If it's not open, open the file, creating if it doesn't exist
-            if (filefd <= 0) {
+            // adjust the size of our accumlated received strings
+            recvbufsize += recsize;
 
-              #ifndef USE_AESD_CHAR_DEVICE
-                // remove it if it exists
-                remove("/var/tmp/aesdsocketdata");
-              #endif
-            
-                if ((filefd = open(DEV_OUT, O_RDWR|O_CREAT|O_APPEND|O_CLOEXEC, 
-                                            S_IRWXU|S_IRWXG|S_IRWXO)) == -1) {
-                    syslog(LOG_USER | LOG_ERR, "Failed to open file, error = %d", errno);
-                    return;
-                }
-            }
+            // if this is the end of the packet, write to the file and send the file
+            if (recvbuf[recvbufsize-1] == '\n') {
 
-            // write what was received to the file (append)
-            if ((returnVal = write(filefd, recvbuf, recsize)) < recsize) {
-                syslog(LOG_USER | LOG_DEBUG, "Failed to write, error = %d", errno);
-            }
+                // see if this is a special command
+                if ((sscanf(recvbuf, "AESDCHAR_IOCSEEKTO:%d:%d", x, y) == 2) {
                 
-          #ifndef USE_AESD_CHAR_DEVICE
-            // unlock the mutex after access is complete
-            if (pthread_mutex_unlock(&fileMutex) != 0) {
-                syslog(LOG_USER | LOG_ERR, "Failed to unlock mutex, error = %d", errno);
-                exit(EXIT_FAILURE);;
-            }
-          #endif
-        
+                    syslog(LOG_USER | LOG_DEBUG, "special command handling");
+                    seekto.write_cmd = x;
+                    seetto.write_cmd_offset = y;
+                    ioctlretval = ioctl(filefd, AESDCHAR_IOCSEEKTO, &seekto);
+                    
+                    syslog(LOG_USER | LOG_DEBUG, "ioctl return: %d", ioctlretval);
+                }
+                else {
+                
+                  #ifndef USE_AESD_CHAR_DEVICE
+                    // lock the mutex before accessing the file
+                    if (pthread_mutex_lock(&fileMutex) != 0) {
+                        syslog(LOG_USER | LOG_ERR, 
+                               "Failed to lock mutex, error = %d", errno);
+                        exit(EXIT_FAILURE);
+                    }
+                  #endif
             
-            // if this is the end of the packet, send the file
-            if (recvbuf[recsize-1] == '\n') {
+                    // If it's not open, open the file, creating if it doesn't exist
+                    if (filefd <= 0) {
+
+                      #ifndef USE_AESD_CHAR_DEVICE
+                        // remove it if it exists
+                        remove("/var/tmp/aesdsocketdata");
+                      #endif
+            
+                        if ((filefd = open(DEV_OUT, O_RDWR|O_CREAT|O_APPEND|O_CLOEXEC, 
+                                                    S_IRWXU|S_IRWXG|S_IRWXO)) == -1) {
+                            syslog(LOG_USER | LOG_ERR, "Failed to open file, error = %d", errno);
+                            return;
+                        }
+                    }
+
+                    // write what was received to the file (append)
+                    if ((returnVal = write(filefd, recvbuf, recbufsize)) < recbufsize) {
+                        syslog(LOG_USER | LOG_DEBUG, "Failed to write, error = %d", errno);
+                    }
+                
+                  #ifndef USE_AESD_CHAR_DEVICE
+                    // unlock the mutex after access is complete
+                    if (pthread_mutex_unlock(&fileMutex) != 0) {
+                        syslog(LOG_USER | LOG_ERR, "Failed to unlock mutex, error = %d", errno);
+                        exit(EXIT_FAILURE);;
+                    }
+                  #endif
+                
+                }
+                
               #ifndef USE_AESD_CHAR_DEVICE
                 // lock the mutex before accessing the file
                 if (pthread_mutex_lock(&fileMutex) != 0) {
@@ -159,11 +184,12 @@ void receiveAndSend(struct socketThread* threadStruct) {
                 }
               #endif
             
-                // send entire file content
+                // send entire file content over the socket
                 if((returnVal = lseek(filefd, 0, SEEK_SET)) != 0) {
                     syslog(LOG_USER | LOG_ERR, 
                     "Failed to seek, position = %d", returnVal);
                 }
+              
                 while ((strsize = read(filefd, sendbuf, BUFF_SIZE)) > 0) {
                     send(threadStruct->streamfd, sendbuf, strsize, MSG_DONTWAIT);
                 }
