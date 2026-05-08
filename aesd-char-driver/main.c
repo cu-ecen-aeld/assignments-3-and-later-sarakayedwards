@@ -138,7 +138,8 @@ loff_t aesd_llseek(struct file *filp, loff_t offset, int whence){
     struct aesd_buffer_entry* entry;
     size_t retByteOffset;
     struct aesd_dev* dev = filp->private_data;
-    loff_t newOffset;
+    loff_t newOffset = offset;
+    int errval = 0;
     
     PDEBUG("seek %lld bytes from %d (0=SET,1=CUR,2=END)", offset, whence);
 
@@ -170,19 +171,20 @@ loff_t aesd_llseek(struct file *filp, loff_t offset, int whence){
             break;
 
         default:  
-            retval = -EINVAL;
+            errval = -EINVAL;
             break;
     }
 
     // error if the new position is outside the file
     if (((entry = aesd_circular_buffer_find_entry_offset_for_fpos
                    (&(dev->buff), newOffset, &retByteOffset)) == NULL) || 
-                   (newOffset < 0)) newOffset = -EINVAL;
+                   (newOffset < 0)) errval = -EINVAL;
     else filp->f_pos = newOffset;
 
     mutex_unlock(&aesd_mutex);
+    
             
-    return newOffset;
+    return (errval == 0 ? newOffset : errval);
 }
 
 int aesd_adjust_file_offset(struct file* filp, unsigned int write_cmd, unsigned int write_cmd_offset) {
@@ -219,9 +221,7 @@ long aesd_ioctl(struct file *filp, unsigned int cmd, unsigned long arg) {
                 retval = EFAULT;
             }
             else {
-                retval = aesd_adjust_file_offset(struct file* filp, 
-                                                 unsigned int write_cmd, 
-                                                 unsigned int write_cmd_offset);
+                retval = aesd_adjust_file_offset(filp, seekto.write_cmd, seekto.write_cmd_offset);
             }
             break;
             
