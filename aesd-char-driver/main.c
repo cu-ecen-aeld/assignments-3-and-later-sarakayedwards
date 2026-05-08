@@ -140,10 +140,11 @@ loff_t aesd_llseek(struct file *filp, loff_t offset, int whence){
     struct aesd_dev* dev = filp->private_data;
     loff_t newOffset = offset;
     int errval = 0;
+    size_t retval = 0;
     
     PDEBUG("seek %lld bytes from %d (0=SET,1=CUR,2=END)", offset, whence);
 
-    mutex_lock(&aesd_mutex);
+    if ((retval = mutex_lock_interruptible(&aesd_mutex)) != 0) return retval;
     
     // if offset is more than we have stored
     if ((entry = aesd_circular_buffer_find_entry_offset_for_fpos
@@ -182,7 +183,6 @@ loff_t aesd_llseek(struct file *filp, loff_t offset, int whence){
     else filp->f_pos = newOffset;
 
     mutex_unlock(&aesd_mutex);
-    
             
     return (errval == 0 ? newOffset : errval);
 }
@@ -193,18 +193,34 @@ int aesd_adjust_file_offset(struct file* filp, unsigned int write_cmd, unsigned 
     int index;
     int new_f_pos = 0;
 
-    if (write_cmd >= AESD_CIRCULAR_BUFFER_NUMBERUSED(&(dev->buff))) return -EINVAL;
+    // get the mutex before we access the buffer
+    if ((retval = mutex_lock_interruptible(&aesd_mutex)) != 0) return retval;
+    
+    // verify the write_cmd is in range
+    if (write_cmd >= AESD_CIRCULAR_BUFFER_NUMBERUSED(&(dev->buff))) {
+        mutex_unlock(&aesd_mutex);
+        return -EINVAL;
+    }
 
+    // add up the number of bytes in each used entry before the one that contains the offset
     AESD_CIRCULAR_BUFFER_FOREACH(entryptr,&(dev->buff),index) {
         if (index < write_cmd) {
             new_f_pos += dev->buff.entry[index].size;
         }
     }
+
+    // verify the write_cmd_offset is in range
+    if (write_cmd_offset >= dev->buff.entry[write_cmd].size) {
+        return -EINVAL;
+    }
     
-    if (write_cmd_offset >= dev->buff.entry[write_cmd].size) return -EINVAL;
+    // release the mutex
+    mutex_unlock(&aesd_mutex);
     
+    // add in the offset within this entry
     new_f_pos += write_cmd_offset;
     
+    // record the new position
     filp->f_pos = new_f_pos;
     
     return 0;  // success
