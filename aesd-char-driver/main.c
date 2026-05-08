@@ -68,7 +68,7 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     // get the semaphore before we write to the buffer
     if ((retval = mutex_lock_interruptible(&aesd_mutex)) != 0) return retval;
 
-    if ((retEntry = aesd_circular_buffer_find_entry_offset_for_f_pos(&(dev->buff),
+    if ((retEntry = aesd_circular_buffer_find_entry_offset_for_fpos(&(dev->buff),
             (size_t)(*f_pos), &retOffset)) == NULL) {
         mutex_unlock(&aesd_mutex);
         return 0;
@@ -135,19 +135,19 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 }
 
 loff_t aesd_llseek(struct file *filp, loff_t offset, int whence){
-    aesd_buffer_entry* entry;
+    struct aesd_buffer_entry* entry;
     size_t retByteOffset;
     struct aesd_dev* dev = filp->private_data;
     loff_t newOffset;
     
     PDEBUG("seek %lld bytes from %d (0=SET,1=CUR,2=END)", offset, whence);
 
-    // if offset is more than we have stored
-    if ((entry = aesd_circular_buffer_find_entry_offset_for_f_pos
-                   (dev->buff.buffptr, offset, &retByteOffset)) == NULL) return -EINVAL;
-
     mutex_lock(&aesd_mutex);
     
+    // if offset is more than we have stored
+    if ((entry = aesd_circular_buffer_find_entry_offset_for_f_pos
+                   (&(dev->buff), offset, &retByteOffset)) == NULL) return -EINVAL;
+
     switch (whence) {
         case SEEK_SET:
 
@@ -171,9 +171,9 @@ loff_t aesd_llseek(struct file *filp, loff_t offset, int whence){
     }
 
     // error if the new position is outside the file
-    if ((entry = aesd_circular_buffer_find_entry_offset_for_f_pos
-                   (dev->buff.buffptr, newOffset, &retByteOffset)) == NULL) || 
-                   (newOffset < 0)) (newOffset = -EINVAL);
+    if (((entry = aesd_circular_buffer_find_entry_offset_for_fpos
+                   (&(dev->buff), newOffset, &retByteOffset)) == NULL) || 
+                   (newOffset < 0)) newOffset = -EINVAL;
     else filp->f_pos = newOffset;
 
     mutex_unlock(&aesd_mutex);
