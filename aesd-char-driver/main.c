@@ -197,11 +197,11 @@ int aesd_adjust_file_offset(struct file* filp, unsigned int write_cmd, unsigned 
 
     AESD_CIRCULAR_BUFFER_FOREACH(entryptr,&(dev->buff),index) {
         if (index < write_cmd) {
-            new_f_pos += dev.buff.entry[index].size;
+            new_f_pos += dev->buff.entry[index].size;
         }
     }
     
-    if (write_cmd_offset >= dev->buff[write_cmd].size) return -EINVAL;
+    if (write_cmd_offset >= dev->buff.entry[write_cmd].size) return -EINVAL;
     
     new_f_pos += write_cmd_offset;
     
