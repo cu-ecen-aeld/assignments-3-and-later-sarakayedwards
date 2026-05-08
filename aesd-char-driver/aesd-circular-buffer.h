@@ -79,7 +79,7 @@ extern void aesd_circular_buffer_init(struct aesd_circular_buffer *buffer);
 
 #define AESD_CIRCULAR_BUFFER_NUMBERUSED(buffer) (buffer)->full ? \
             AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED : \
-            ((buffer)->in_offs >= (buffer)->out_offs : \
+            ((buffer)->in_offs >= (buffer)->out_offs ? \
                 (buffer)->in_offs - (buffer)->out_offs : \
                 (buffer)->in_offs + AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED - (buffer)->out_offs)
                 
