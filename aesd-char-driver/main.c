@@ -168,6 +168,10 @@ loff_t aesd_llseek(struct file *filp, loff_t offset, int whence){
             newOffset = filp->f_pos - offset;
             
             break;
+
+        default:  
+            retval = -EINVAL;
+            break;
     }
 
     // error if the new position is outside the file
@@ -179,6 +183,28 @@ loff_t aesd_llseek(struct file *filp, loff_t offset, int whence){
     mutex_unlock(&aesd_mutex);
             
     return newOffset;
+}
+
+int aesd_adjust_file_offset(struct file* filp, unsigned int write_cmd, unsigned int write_cmd_offset) {
+    struct aesd_dev* dev = filp->private_data;
+    struct aesd_buffer_entry entry;
+    int index;
+    int new_f_pos = 0;
+    int retval = 0;  // 0 = success
+
+    if (write_cmd >= AESD_CIRCULAR_BUFFER_NUMBERUSED(&(dev->buff)) return -EINVAL;
+
+    AESD_CIRCULAR_BUFFER_FOREACH(&entry,&(dev->buff),index) {
+        if (index < write_cmd) new_f_pos += dev.buff.entry[index].size;
+    }
+    
+    if (write_cmd_offset >= dev->buff[write_cmd].size) return -EINVAL;
+    
+    new_f_pos += write_cmd_offset;
+    
+    filp->f_pos = new_f_pos;
+    
+    return retval;
 }
 
 long aesd_ioctl(struct file *filp, unsigned int cmd, unsigned long arg) {
@@ -193,10 +219,15 @@ long aesd_ioctl(struct file *filp, unsigned int cmd, unsigned long arg) {
                 retval = EFAULT;
             }
             else {
-                retval = aesd_llseek(filp, seekto.write_cmd, seekto.write_cmd_offset);       
+                retval = aesd_adjust_file_offset(struct file* filp, 
+                                                 unsigned int write_cmd, 
+                                                 unsigned int write_cmd_offset);
             }
             break;
             
+        default:  
+            retval = -EINVAL;
+            break;
     }
     
     return retval;
