@@ -189,8 +189,12 @@ long aesd_ioctl(struct file *filp, unsigned int cmd, unsigned long arg) {
     switch (cmd) {
     
         case AESDCHAR_IOCSEEKTO:
-            retval = aesd_llseek(filp, seekto.write_cmd, seekto.write_cmd_offset);       
-            return retval;
+            if (copy_from_user(&seekto, (const void __user *)arg, sizeof(seekto)) != 0) {
+                retval = EFAULT;
+            }
+            else {
+                retval = aesd_llseek(filp, seekto.write_cmd, seekto.write_cmd_offset);       
+            }
             break;
             
     }
