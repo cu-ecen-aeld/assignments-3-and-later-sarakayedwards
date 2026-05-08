@@ -145,7 +145,7 @@ loff_t aesd_llseek(struct file *filp, loff_t offset, int whence){
     mutex_lock(&aesd_mutex);
     
     // if offset is more than we have stored
-    if ((entry = aesd_circular_buffer_find_entry_offset_for_f_pos
+    if ((entry = aesd_circular_buffer_find_entry_offset_for_fpos
                    (&(dev->buff), offset, &retByteOffset)) == NULL) return -EINVAL;
 
     switch (whence) {
