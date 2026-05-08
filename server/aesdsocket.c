@@ -129,7 +129,7 @@ void receiveAndSend(struct socketThread* threadStruct) {
                 
                     syslog(LOG_USER | LOG_DEBUG, "special command handling");
                     seekto.write_cmd = x;
-                    seetto.write_cmd_offset = y;
+                    seekto.write_cmd_offset = y;
                     ioctlretval = ioctl(filefd, AESDCHAR_IOCSEEKTO, &seekto);
                     
                     syslog(LOG_USER | LOG_DEBUG, "ioctl return: %d", ioctlretval);
@@ -161,7 +161,7 @@ void receiveAndSend(struct socketThread* threadStruct) {
                     }
 
                     // write what was received to the file (append)
-                    if ((returnVal = write(filefd, recvbuf, recbufsize)) < recbufsize) {
+                    if ((returnVal = write(filefd, recvbuf, recvbufsize)) < recvbufsize) {
                         syslog(LOG_USER | LOG_DEBUG, "Failed to write, error = %d", errno);
                     }
                 
