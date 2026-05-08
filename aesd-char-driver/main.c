@@ -192,12 +192,13 @@ int aesd_adjust_file_offset(struct file* filp, unsigned int write_cmd, unsigned 
     struct aesd_buffer_entry entry;
     int index;
     int new_f_pos = 0;
-    int retval = 0;  // 0 = success
 
-    if (write_cmd >= AESD_CIRCULAR_BUFFER_NUMBERUSED(&(dev->buff)) return -EINVAL;
+    if (write_cmd >= AESD_CIRCULAR_BUFFER_NUMBERUSED(&(dev->buff))) return -EINVAL;
 
     AESD_CIRCULAR_BUFFER_FOREACH(&entry,&(dev->buff),index) {
-        if (index < write_cmd) new_f_pos += dev.buff.entry[index].size;
+        if (index < write_cmd) {
+            new_f_pos += dev.buff.entry[index].size;
+        }
     }
     
     if (write_cmd_offset >= dev->buff[write_cmd].size) return -EINVAL;
@@ -206,7 +207,7 @@ int aesd_adjust_file_offset(struct file* filp, unsigned int write_cmd, unsigned 
     
     filp->f_pos = new_f_pos;
     
-    return retval;
+    return 0;  // success
 }
 
 long aesd_ioctl(struct file *filp, unsigned int cmd, unsigned long arg) {
