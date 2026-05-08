@@ -189,13 +189,13 @@ loff_t aesd_llseek(struct file *filp, loff_t offset, int whence){
 
 int aesd_adjust_file_offset(struct file* filp, unsigned int write_cmd, unsigned int write_cmd_offset) {
     struct aesd_dev* dev = filp->private_data;
-    struct aesd_buffer_entry entry;
+    struct aesd_buffer_entry* entryptr;
     int index;
     int new_f_pos = 0;
 
     if (write_cmd >= AESD_CIRCULAR_BUFFER_NUMBERUSED(&(dev->buff))) return -EINVAL;
 
-    AESD_CIRCULAR_BUFFER_FOREACH(&entry,&(dev->buff),index) {
+    AESD_CIRCULAR_BUFFER_FOREACH(entryptr,&(dev->buff),index) {
         if (index < write_cmd) {
             new_f_pos += dev.buff.entry[index].size;
         }
