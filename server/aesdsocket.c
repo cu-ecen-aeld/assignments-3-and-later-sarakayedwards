@@ -130,7 +130,11 @@ void receiveAndSend(struct socketThread* threadStruct) {
                     syslog(LOG_USER | LOG_DEBUG, "special command handling");
                     seekto.write_cmd = x;
                     seekto.write_cmd_offset = y;
-                    ioctlretval = ioctl(filefd, AESDCHAR_IOCSEEKTO, &seekto);
+                    
+                    // make sure the file is already open
+                    if (filefd > 0) {
+                        ioctlretval = ioctl(fileno(filefd), AESDCHAR_IOCSEEKTO, &seekto);
+                    }
                     
                     syslog(LOG_USER | LOG_DEBUG, "ioctl return: %d", ioctlretval);
                 }
