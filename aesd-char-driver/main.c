@@ -195,6 +195,7 @@ int aesd_adjust_file_offset(struct file* filp, unsigned int write_cmd, unsigned 
     struct aesd_buffer_entry* entryptr;
     int index;
     int new_f_pos = 0;
+    int retval;
 
     // get the mutex before we access the buffer
     if ((retval = mutex_lock_interruptible(&aesd_mutex)) != 0) return retval;
