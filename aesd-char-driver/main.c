@@ -148,40 +148,43 @@ loff_t aesd_llseek(struct file *filp, loff_t offset, int whence){
     
     // if offset is more than we have stored
     if ((entry = aesd_circular_buffer_find_entry_offset_for_fpos
-                   (&(dev->buff), offset, &retByteOffset)) == NULL) return -EINVAL;
-
-    switch (whence) {
-        case SEEK_SET:
-
-            // set the position to the input offset
-            newOffset = offset;
-            break;
-            
-        case SEEK_CUR:
-            
-            //set the position to the current position + the input offset
-            newOffset = filp->f_pos + offset;
-            
-            break;
-            
-        case SEEK_END:
-
-            //set the position to the current position + the input offset
-            newOffset = filp->f_pos - offset;
-            
-            break;
-
-        default:  
-            errval = -EINVAL;
-            break;
+                   (&(dev->buff), offset, &retByteOffset)) == NULL) {
+        errval = -EINVAL;
     }
+    else {
+        switch (whence) {
+            case SEEK_SET:
 
-    // error if the new position is outside the file
-    if (((entry = aesd_circular_buffer_find_entry_offset_for_fpos
-                   (&(dev->buff), newOffset, &retByteOffset)) == NULL) || 
-                   (newOffset < 0)) errval = -EINVAL;
-    else filp->f_pos = newOffset;
+                // set the position to the input offset
+                newOffset = offset;
+                break;
+            
+            case SEEK_CUR:
+            
+                //set the position to the current position + the input offset
+                newOffset = filp->f_pos + offset;
+            
+                break;
+            
+            case SEEK_END:
 
+                //set the position to the current position + the input offset
+                newOffset = filp->f_pos - offset;
+            
+                break;
+
+            default:  
+                errval = -EINVAL;
+                break;
+        }
+
+        // error if the new position is outside the file
+        if (((entry = aesd_circular_buffer_find_entry_offset_for_fpos
+                       (&(dev->buff), newOffset, &retByteOffset)) == NULL) || 
+                       (newOffset < 0)) errval = -EINVAL;
+        else filp->f_pos = newOffset;
+    }
+    
     mutex_unlock(&aesd_mutex);
             
     return (errval == 0 ? newOffset : errval);
@@ -205,12 +208,13 @@ int aesd_adjust_file_offset(struct file* filp, unsigned int write_cmd, unsigned 
     // add up the number of bytes in each used entry before the one that contains the offset
     AESD_CIRCULAR_BUFFER_FOREACH(entryptr,&(dev->buff),index) {
         if (index < write_cmd) {
-            new_f_pos += dev->buff.entry[index].size;
+            new_f_pos += entryptr->size;
         }
     }
 
     // verify the write_cmd_offset is in range
     if (write_cmd_offset >= dev->buff.entry[write_cmd].size) {
+        mutex_unlock(&aesd_mutex);
         return -EINVAL;
     }
     

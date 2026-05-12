@@ -125,7 +125,7 @@ void receiveAndSend(struct socketThread* threadStruct) {
             if (recvbuf[recvbufsize-1] == '\n') {
 
                 // see if this is a special command
-                if (sscanf(recvbuf, "AESDCHAR_IOCSEEKTO:%d:%d", x, y) == 2) {
+                if (sscanf(recvbuf, "AESDCHAR_IOCSEEKTO:%d:%d", &x, &y) == 2) {
                 
                     syslog(LOG_USER | LOG_DEBUG, "special command handling");
                     seekto.write_cmd = x;
@@ -159,6 +159,14 @@ void receiveAndSend(struct socketThread* threadStruct) {
             
                         if ((filefd = open(DEV_OUT, O_RDWR|O_CREAT|O_APPEND|O_CLOEXEC, 
                                                     S_IRWXU|S_IRWXG|S_IRWXO)) == -1) {
+                          #ifndef USE_AESD_CHAR_DEVICE
+                            // unlock the mutex after access is complete
+                            if (pthread_mutex_unlock(&fileMutex) != 0) {
+                                syslog(LOG_USER | LOG_ERR, 
+                                       "Failed to unlock mutex, error = %d", errno);
+                                exit(EXIT_FAILURE);;
+                            }
+                          #endif
                             syslog(LOG_USER | LOG_ERR, "Failed to open file, error = %d", errno);
                             return;
                         }
