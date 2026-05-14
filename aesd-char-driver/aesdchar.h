@@ -31,7 +31,7 @@ struct aesd_dev
 
     struct cdev cdev;     /* Char device structure      */
     char holdingBuff[KMALLOC_MAX_SIZE];
-    int holdingBuffSize;  // how many characters we are currently holding
+    unsigned long holdingBuffSize;  // how many characters we are currently holding
     struct aesd_circular_buffer buff;
 };
 

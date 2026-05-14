@@ -62,7 +62,7 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     int bytesRem;
     int bytesNotCopied;
     size_t mycount;
-    size_t myf_pos;
+    loff_t myf_pos;
     
     //if ((bytesNotCopied = copy_from_user(&mycount, &count, sizeof(size_t))) != 0) {return 0;}
 
@@ -105,7 +105,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     const char* memToFree;
     struct aesd_dev* dev = filp->private_data;
     struct aesd_buffer_entry newEntry;
-    int bytesNotCopied;
+    unsigned long bytesNotCopied;
     
     PDEBUG("write %zu bytes with offset %lld",count,*f_pos);
 
