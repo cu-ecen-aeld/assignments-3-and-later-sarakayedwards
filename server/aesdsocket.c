@@ -94,9 +94,12 @@ void receiveAndSend(struct socketThread* threadStruct) {
     char sendbuf[BUFF_SIZE];
     size_t strsize;
     int recsize;
+    
+  #ifdef USE_AESD_CHAR_DEVICE  
     struct aesd_seekto seekto;
     int x,y;
     int ioctlretval;
+  #endif
 
     while (!signalReceived) {
     
@@ -124,8 +127,9 @@ void receiveAndSend(struct socketThread* threadStruct) {
             // if this is the end of the packet, write to the file and send the file
             if (recvbuf[recvbufsize-1] == '\n') {
 
+              #ifdef USE_AESD_CHAR_DEVICE
                 // see if this is a special command
-                if (sscanf(recvbuf, "AESDCHAR_IOCSEEKTO:%d:%d", &x, &y) == 2) {
+                if (sscanf(recvbuf, "AESDCHAR_IOCSEEKTO:%d,%d", &x, &y) == 2) {
                 
                     syslog(LOG_USER | LOG_DEBUG, "special command handling");
                     seekto.write_cmd = x;
@@ -139,7 +143,8 @@ void receiveAndSend(struct socketThread* threadStruct) {
                     syslog(LOG_USER | LOG_DEBUG, "ioctl return: %d", ioctlretval);
                 }
                 else {
-                
+              #endif
+                              
                   #ifndef USE_AESD_CHAR_DEVICE
                     // lock the mutex before accessing the file
                     if (pthread_mutex_lock(&fileMutex) != 0) {
@@ -185,7 +190,9 @@ void receiveAndSend(struct socketThread* threadStruct) {
                     }
                   #endif
                 
+              #ifdef USE_AESD_CHAR_DEVICE
                 }
+              #endif
                 
               #ifndef USE_AESD_CHAR_DEVICE
                 // lock the mutex before accessing the file

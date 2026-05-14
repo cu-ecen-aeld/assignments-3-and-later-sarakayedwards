@@ -245,6 +245,8 @@ long aesd_ioctl(struct file *filp, unsigned int cmd, unsigned long arg) {
             else {
                 retval = aesd_adjust_file_offset(filp, seekto.write_cmd, seekto.write_cmd_offset);
             }
+            PDEBUG("handling the AESDCHAR_IOCSEEKTO command with %d, %d", 
+                   seekto.write_cmd, seekto.write_cmd_offset);
             break;
             
         default:  
