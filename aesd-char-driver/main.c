@@ -61,15 +61,23 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     size_t retOffset;
     int bytesRem;
     int bytesNotCopied;
+    size_t mycount;
+    size_t myf_pos;
     
-    PDEBUG("read %zu bytes with offset %lld",count,*f_pos);
+    //if ((bytesNotCopied = copy_from_user(&mycount, &count, sizeof(size_t))) != 0) {return 0;}
+
+    //if ((bytesNotCopied = copy_from_user(&myf_pos, f_pos, sizeof(loff_t))) != 0) {return 0;}
+    mycount = count;
+    myf_pos = *f_pos;
+    
+    PDEBUG("read %zu bytes with offset %lld",mycount,myf_pos);
 
 
     // get the semaphore before we write to the buffer
     if ((retval = mutex_lock_interruptible(&aesd_mutex)) != 0) return retval;
 
     if ((retEntry = aesd_circular_buffer_find_entry_offset_for_fpos(&(dev->buff),
-            (size_t)(*f_pos), &retOffset)) == NULL) {
+            (size_t)(myf_pos), &retOffset)) == NULL) {
         mutex_unlock(&aesd_mutex);
         return 0;
     }
@@ -80,7 +88,9 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     mutex_unlock(&aesd_mutex);
     
     // update f_pos
-    *f_pos = *f_pos + bytesRem - bytesNotCopied;
+    myf_pos = myf_pos + bytesRem - bytesNotCopied;
+    //if ((bytesNotCopied = copy_to_user(f_pos, &myf_pos, sizeof(loff_t))) != 0) {return 0;}
+    *f_pos = myf_pos;
     
     // return the number of bytes we read
     retval = bytesRem - bytesNotCopied;
