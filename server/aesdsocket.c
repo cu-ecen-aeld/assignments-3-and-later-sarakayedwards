@@ -313,6 +313,9 @@ int main(int argc, char* argv[]) {
     time_t nextTime;
   #endif
     
+    // DEBUG
+    syslog(LOG_USER | LOG_ERR, "Output device: %s", DEV_OUT);
+    
   #ifndef USE_AESD_CHAR_DEVICE
     // initialize mutex lock for file
     if (pthread_mutex_init(&fileMutex, NULL) != 0) {
