@@ -205,12 +205,6 @@ void receiveAndSend(struct socketThread* threadStruct) {
                 }
               #endif
             
-                // send entire file content over the socket
-                if((returnVal = lseek(filefd, 0, SEEK_SET)) != 0) {
-                    syslog(LOG_USER | LOG_ERR, 
-                    "Failed to seek, position = %d", returnVal);
-                }
-              
                 while ((strsize = read(filefd, sendbuf, BUFF_SIZE)) > 0) {
                     send(threadStruct->streamfd, sendbuf, strsize, MSG_DONTWAIT);
                 }
