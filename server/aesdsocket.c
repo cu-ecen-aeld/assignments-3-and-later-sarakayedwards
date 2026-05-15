@@ -179,7 +179,7 @@ void receiveAndSend(struct socketThread* threadStruct) {
                         }
                     }
 
-                    // write what was received to the file (append)
+                    // write what was received to the file 
                     if ((returnVal = write(filefd, recvbuf, recvbufsize)) < recvbufsize) {
                         syslog(LOG_USER | LOG_DEBUG, "Failed to write, error = %d", errno);
                     }
@@ -191,6 +191,12 @@ void receiveAndSend(struct socketThread* threadStruct) {
                         exit(EXIT_FAILURE);;
                     }
                   #endif
+                  
+                    // send entire file content over the socket
+                    if((returnVal = lseek(filefd, 0, SEEK_SET)) != 0) {
+                        syslog(LOG_USER | LOG_ERR, 
+                        "Failed to seek, position = %d", returnVal);
+                    }
                 
               #ifdef USE_AESD_CHAR_DEVICE
                 }
