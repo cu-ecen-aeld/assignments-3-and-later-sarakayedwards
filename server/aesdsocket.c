@@ -24,6 +24,8 @@ int filefd = -1;
 pthread_mutex_t fileMutex;
 pthread_t* tsThread;
 
+#define USE_AESD_CHAR_DEVICE 1
+
 #ifdef USE_AESD_CHAR_DEVICE
   #define DEV_OUT "/dev/aesdchar"
   #undef TIMESTAMP_ENABLED
@@ -97,7 +99,7 @@ void receiveAndSend(struct socketThread* threadStruct) {
     
   #ifdef USE_AESD_CHAR_DEVICE  
     struct aesd_seekto seekto;
-    int x,y;
+    unsigned int x,y;
     int ioctlretval;
   #endif
 
@@ -129,7 +131,7 @@ void receiveAndSend(struct socketThread* threadStruct) {
 
               #ifdef USE_AESD_CHAR_DEVICE
                 // see if this is a special command
-                if (sscanf(recvbuf, "AESDCHAR_IOCSEEKTO:%d,%d", &x, &y) == 2) {
+                if (sscanf(recvbuf, "AESDCHAR_IOCSEEKTO:%u,%u", &x, &y) == 2) {
                 
                     syslog(LOG_USER | LOG_DEBUG, "special command handling");
                     seekto.write_cmd = x;
@@ -137,7 +139,7 @@ void receiveAndSend(struct socketThread* threadStruct) {
                     
                     // make sure the file is already open
                     if (filefd > 0) {
-                        ioctlretval = ioctl(fileno(filefd), AESDCHAR_IOCSEEKTO, &seekto);
+                        ioctlretval = ioctl(filefd, AESDCHAR_IOCSEEKTO, &seekto);
                     }
                     
                     syslog(LOG_USER | LOG_DEBUG, "ioctl return: %d", ioctlretval);
