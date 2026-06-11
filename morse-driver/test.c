@@ -1,0 +1,161 @@
+/******************************************************************************
+* test.c
+*
+* Test module for the morse-driver package.
+*
+******************************************************************************/
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <fcntl.h>
+#include <time.h>
+#include <errno.h>
+#include <unistd.h>
+#include <sys/mman.h>
+#include "morse-driver.h"
+
+char outSignal[MAX_BUFFER_SIZE];
+char inSignal[MAX_BUFFER_SIZE];
+
+/******************************************************************************
+* morse_test()
+*
+* No parameters: Output a square wave with a two-second wavelength (1 second
+*                  high, one second low) on the output pin indefinitely.
+*                Read the input pin at half second intervals and output it 
+*                 (0 for low, 1 for high) to stdout.
+* 
+* -wN, where N is a number 1 - 5000:
+*                Output a square wave with a 2N millisecond wavelength (N ms
+*                  high, N ms low) on the output pin.
+*                Read the input pin at N/2 ms intervals and output the first 
+*                 MAX_OUTPUTS readings (0 for low, 1 for high) to stdout.
+*
+* -nN, where N is a number 1 - 5000:
+*                Output N square waves on the output pin.
+*                Read the input pin at the specified interval 2N times.
+*
+******************************************************************************/
+
+void morse_test(int argc, char* argv[]) {
+    
+
+}
+
+int main(void) {
+
+    struct timespec delayTime;
+    int errType = 0;
+        
+    void* memmap;
+    uint32_t* gpiomem;
+    int memfd;
+    
+    if ((memfd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) {return -1;}
+    
+    // map virtual address space for pins
+    if ((memmap = mmap(NULL, 
+                  BLOCK_SIZE, 
+                  PROT_READ | PROT_WRITE, 
+                  MAP_SHARED, 
+                  memfd, 
+                  GPIO_BASE)) == MAP_FAILED) {close(memfd); return -1;}
+                  
+    close(memfd);
+    
+    // this is our base address to which we add our offsets
+    gpiomem = (uint32_t*)memmap;
+    
+    // output a square wave with a wavelength of 1 second
+    while (1) {
+    
+        *(gpiomem + GPIO_SET_OFFSET) = OUTPUT_PIN_MASK;
+    
+        // set for 500ms
+        delayTime.tv_sec = 0;
+        delayTime.tv_nsec = 500000;
+        do {
+            if (nanosleep(&delayTime, &delayTime) == -1) {
+              errType = errno;
+            }
+        } while (errType == EINTR);      
+
+        *(gpiomem + GPIO_CLEAR_OFFSET) = OUTPUT_PIN_MASK;
+    
+        // set for 500ms
+        delayTime.tv_sec = 0;
+        delayTime.tv_nsec = 500000;
+        do {
+            if (nanosleep(&delayTime, &delayTime) == -1) {
+              errType = errno;
+            }
+        } while (errType == EINTR);      
+    }
+
+/*
+    // start by sending a specified sequence
+    printf("Output signal should see high-low-high-low, 500ms each");
+
+    // set for 500ms
+    delayTime.tv_sec = 0;
+    delayTime.tv_nsec = 500000;
+    
+    MORSE_WRITE(1);
+    
+    do {
+        if (sleep(delayTime, &delayTime) == -1) {
+          errType = errno;
+        }
+    } while (errType == EINTR);      
+
+    // set for 500ms
+    delayTime.tv_sec = 0;
+    delayTime.tv_nsec = 500000;
+    
+    MORSE_WRITE(0);
+    
+    do {
+        if (sleep(delayTime, &delayTime) == -1) {
+          errType = errno;
+        }
+    } while (errType == EINTR);      
+
+    // set for 500ms
+    delayTime.tv_sec = 0;
+    delayTime.tv_nsec = 500000;
+    
+    MORSE_WRITE(1);
+    
+    do {
+        if (sleep(delayTime, &delayTime) == -1) {
+          errType = errno;
+        }
+    } while (errType == EINTR);      
+
+    // set for 500ms
+    delayTime.tv_sec = 0;
+    delayTime.tv_nsec = 500000;
+    
+    MORSE_WRITE(0);
+    
+    do {
+        if (sleep(delayTime, &delayTime) == -1) {
+          errType = errno;
+        }
+    } while (errType == EINTR);      
+    
+    // Pause for 10 seconds for test setup
+    printf("Please connect the input to the output.");
+    // set for 10 sec
+    delayTime.tv_sec = 10;
+    delayTime.tv_nsec = 0;
+    
+   do {
+        if (sleep(delayTime, &delayTime) == -1) {
+          errType = errno;
+        }
+    } while (errType == EINTR); 
+    
+    //
+*/
+}
