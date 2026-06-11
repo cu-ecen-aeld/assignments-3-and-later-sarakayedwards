@@ -11,6 +11,7 @@
 #include <time.h>
 #include <errno.h>
 #include <unistd.h>
+#include <syslog.h>
 #include <sys/mman.h>
 #include "morse-driver.h"
 
@@ -48,10 +49,14 @@ int main(void) {
     int errType = 0;
         
     void* memmap;
-    uint32_t* gpiomem;
+    volatile uint32_t* gpiomem;
     int memfd;
+    int i;
     
-    if ((memfd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) {return -1;}
+    if ((memfd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) {
+        syslog(LOG_USER|LOG_DEBUG, "test: open failed, errno = %d", errno);
+        return -1;
+    }
     
     // map virtual address space for pins
     if ((memmap = mmap(NULL, 
@@ -59,15 +64,26 @@ int main(void) {
                   PROT_READ | PROT_WRITE, 
                   MAP_SHARED, 
                   memfd, 
-                  GPIO_BASE)) == MAP_FAILED) {close(memfd); return -1;}
+                  GPIO_BASE)) == MAP_FAILED) {
+        syslog(LOG_USER|LOG_DEBUG, "test: memmap failed, errno = %d", errno);
+        close(memfd); 
+        return -1;
+    }
                   
     close(memfd);
     
     // this is our base address to which we add our offsets
     gpiomem = (uint32_t*)memmap;
     
+    // set the pin as an output by setting the mode bits to 111 for write
+    *(gpiomem + GPIO_FSEL2_OFFSET) &= ~(7 << 9);
+    *(gpiomem + GPIO_FSEL2_OFFSET) |= (7 << 9);
+
+    // read the gpio pins
+    printf("GPIO pins read: %x", *(gpiomem + GPIO_READ_OFFSET));
+        
     // output a square wave with a wavelength of 1 second
-    while (1) {
+    for (i=0;i<20;i++) {
     
         *(gpiomem + GPIO_SET_OFFSET) = OUTPUT_PIN_MASK;
     
@@ -80,6 +96,8 @@ int main(void) {
             }
         } while (errType == EINTR);      
 
+        printf("GPIO pins read: %x", *(gpiomem + GPIO_READ_OFFSET));
+
         *(gpiomem + GPIO_CLEAR_OFFSET) = OUTPUT_PIN_MASK;
     
         // set for 500ms
@@ -90,6 +108,10 @@ int main(void) {
               errType = errno;
             }
         } while (errType == EINTR);      
+
+        printf("GPIO pins read: %x", *(gpiomem + GPIO_READ_OFFSET));
+
+        munmap((void*)gpiomem, BLOCK_SIZE);
     }
 
 /*
