@@ -12,10 +12,11 @@
 
 #define GPIO_BASE 0xFE200000
 
-#define GPIO_FSEL2_OFFSET 0x08   // we are only using GPIO pins 23 and 24
-#define GPIO_SET_OFFSET   0x1C   // selects pins to set (high)
-#define GPIO_CLEAR_OFFSET 0x28   // selects pins to clear (low)
-#define GPIO_READ_OFFSET  0x34   // 0 for low, 1 for high
+// offsets are in bytes, but we are counting by 32 bits
+#define GPIO_FSEL2_OFFSET (0x08 / 4)   // we are only using GPIO pins 23 and 24
+#define GPIO_SET_OFFSET   (0x1C / 4)   // selects pins to set (high)
+#define GPIO_CLEAR_OFFSET (0x28 / 4)   // selects pins to clear (low)
+#define GPIO_READ_OFFSET  (0x34 / 4)   // 0 for low, 1 for high
 
 #define OUTPUT_PIN_MASK   (1 << 23)   // using pin 23 for output
 #define INPUT_PIN_MASK    (1 << 24)   // using pin 24 for input
