@@ -37,11 +37,17 @@ char inSignal[MAX_BUFFER_SIZE];
 *                Read the input pin at the specified interval 2N times.
 *
 ******************************************************************************/
-
 void morse_test(int argc, char* argv[]) {
     
 
 }
+
+/******************************************************************************
+* int sendBufferContents(int* buffer)
+*
+* Parameters: int* buffer
+*
+******************************************************************************/
 
 int main(void) {
 
@@ -53,11 +59,15 @@ int main(void) {
     int memfd;
     int i;
     
+    syslog(LOG_USER|LOG_DEBUG, "running test...");  
+
     if ((memfd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) {
         syslog(LOG_USER|LOG_DEBUG, "test: open failed, errno = %d", errno);
         return -1;
     }
     
+    syslog(LOG_USER|LOG_DEBUG, "test: open success, fd = %d", memfd);  
+
     // map virtual address space for pins
     if ((memmap = mmap(NULL, 
                   BLOCK_SIZE, 
@@ -70,21 +80,29 @@ int main(void) {
         return -1;
     }
                   
+    syslog(LOG_USER|LOG_DEBUG, "test: mmap success");  
+
     close(memfd);
     
     // this is our base address to which we add our offsets
     gpiomem = (uint32_t*)memmap;
     
     // set the pin as an output by setting the mode bits to 111 for write
+    syslog(LOG_USER|LOG_DEBUG, "test: setting pin function");  
+
     *(gpiomem + GPIO_FSEL2_OFFSET) &= ~(7 << 9);
     *(gpiomem + GPIO_FSEL2_OFFSET) |= (7 << 9);
 
     // read the gpio pins
+    syslog(LOG_USER|LOG_DEBUG, "test: reading pins");  
+
     printf("GPIO pins read: %x", *(gpiomem + GPIO_READ_OFFSET));
         
     // output a square wave with a wavelength of 1 second
     for (i=0;i<20;i++) {
     
+        syslog(LOG_USER|LOG_DEBUG, "test: setting output pin");  
+
         *(gpiomem + GPIO_SET_OFFSET) = OUTPUT_PIN_MASK;
     
         // set for 500ms
@@ -97,6 +115,8 @@ int main(void) {
         } while (errType == EINTR);      
 
         printf("GPIO pins read: %x", *(gpiomem + GPIO_READ_OFFSET));
+
+        syslog(LOG_USER|LOG_DEBUG, "test: clearing output pin");  
 
         *(gpiomem + GPIO_CLEAR_OFFSET) = OUTPUT_PIN_MASK;
     
