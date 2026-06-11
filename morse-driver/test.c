@@ -51,9 +51,6 @@ void morse_test(int argc, char* argv[]) {
 
 int main(void) {
 
-    struct timespec delayTime;
-    int errType = 0;
-        
     void* memmap;
     volatile uint32_t* gpiomem;
     int memfd;
@@ -98,21 +95,15 @@ int main(void) {
 
     printf("GPIO pins read: %x", *(gpiomem + GPIO_READ_OFFSET));
         
-    // output a square wave with a wavelength of 1 second
+    // output a square wave with a wavelength of 2 seconds
     for (i=0;i<20;i++) {
     
         syslog(LOG_USER|LOG_DEBUG, "test: setting output pin");  
 
         *(gpiomem + GPIO_SET_OFFSET) = OUTPUT_PIN_MASK;
     
-        // set for 500ms
-        delayTime.tv_sec = 0;
-        delayTime.tv_nsec = 500000;
-        do {
-            if (nanosleep(&delayTime, &delayTime) == -1) {
-              errType = errno;
-            }
-        } while (errType == EINTR);      
+        // sleep for 1 second
+        sleep(1);    
 
         printf("GPIO pins read: %x", *(gpiomem + GPIO_READ_OFFSET));
 
@@ -120,14 +111,8 @@ int main(void) {
 
         *(gpiomem + GPIO_CLEAR_OFFSET) = OUTPUT_PIN_MASK;
     
-        // set for 500ms
-        delayTime.tv_sec = 0;
-        delayTime.tv_nsec = 500000;
-        do {
-            if (nanosleep(&delayTime, &delayTime) == -1) {
-              errType = errno;
-            }
-        } while (errType == EINTR);      
+        // sleep for 1 second
+        sleep(1);    
 
         printf("GPIO pins read: %x", *(gpiomem + GPIO_READ_OFFSET));
 
