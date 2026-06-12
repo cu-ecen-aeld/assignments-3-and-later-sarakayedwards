@@ -70,9 +70,7 @@ int main(void) {
     int i;
     
     struct timespec timeUnit;
-
-    timeUnit.tv_sec = 0;
-    timeUnit.tv_nsec = MORSE_TIME_UNIT * 1000; // milliseconds to nanoseconds
+    struct timespec timeLeft;
 
     // Pre-load output signal with a message
     // "what hath god wrought" (First message sent by telegraph)
@@ -164,8 +162,14 @@ int main(void) {
         }
     
         // sleep for 1 time unit
-        nanosleep(&timeUnit, NULL);
+        timeUnit.tv_sec = MORSE_TIME_UNIT / 1000;
+        timeUnit.tv_nsec = (MORSE_TIME_UNIT % 1000) * 1000; // milliseconds to nanoseconds
 
+        do {
+            nanosleep(&timeUnit, &timeLeft);
+            timeUnit.tv_sec = timeLeft.tv_sec;
+            timeUnit.tv_nsec = timeLeft.tv_nsec;
+        } while (timeUnit.tv_sec + timeUnit.tv_nsec > 0);
     }
 
     munmap((void*)gpiomem, BLOCK_SIZE);
