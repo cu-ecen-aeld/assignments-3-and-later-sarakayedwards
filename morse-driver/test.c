@@ -15,8 +15,21 @@
 #include <sys/mman.h>
 #include "morse-driver.h"
 
-char outSignal[MAX_BUFFER_SIZE];
-char inSignal[MAX_BUFFER_SIZE];
+
+// these are 0s and 1s representing one time unit the signal sent/received
+// Ideally, this will be a circular buffer. The application thread writes to
+// outSignal and reads from inSignal. Separate send and receive threads read 
+// from outSignal and write to readSignal.
+
+struct signalBuffer {
+    char buff[MAX_BUFFER_SIZE];
+    int head;
+    int tail;
+};
+
+// pre-load with a hard-coded message
+struct signalBuffer outSignal;
+struct signalBuffer inSignal;
 
 /******************************************************************************
 * morse_test()
@@ -56,6 +69,49 @@ int main(void) {
     int memfd;
     int i;
     
+    struct timespec timeUnit;
+
+    timeUnit.tv_sec = 0;
+    timeUnit.tv_nsec = MORSE_TIME_UNIT * 1000; // milliseconds to nanoseconds
+
+    // Pre-load output signal with a message
+    // "what hath god wrought" (First message sent by telegraph)
+    // .-- .... .- - / .... .- - .... / --. --- -.. / .-- .-. --- ..- --. .... -
+    // . = high for one unit of time
+    // - = high for three units of time
+    // Space between high signals is low for one unit of time
+    // Space between characters is low for 3 units of time
+    // Space between words is low for 7 units of time
+
+    char morseBuffer[1024] = ".-- .... .- - / .... .- - .... / --. --- -.. / .-- .-. --- ..- --. .... -";
+    outSignal.head = 0;
+    outSignal.tail = 0;
+    
+    // Fill signal buffer with 0s and 1s to output
+    for (i = 0; morseBuffer[i] != '\0'; i ++) {
+        switch (morseBuffer[i]) {
+            case '.':
+                outSignal.buff[outSignal.head++] = 1;
+                outSignal.buff[outSignal.head++] = 0;
+                break;
+            case '-':
+                outSignal.buff[outSignal.head++] = 1;
+                outSignal.buff[outSignal.head++] = 1;
+                outSignal.buff[outSignal.head++] = 1;
+                outSignal.buff[outSignal.head++] = 0;
+                break;
+            case ' ':   // only two time units need to be added to make the 3 total
+                outSignal.buff[outSignal.head++] = 0;
+                outSignal.buff[outSignal.head++] = 0; 
+                break;
+            case '/':   // only two are needed since ' ' will come before and after
+                outSignal.buff[outSignal.head++] = 0;
+                outSignal.buff[outSignal.head++] = 0;
+                break;
+            default :  // don't add anything for any other characters
+        }
+    }
+    
     syslog(LOG_USER|LOG_DEBUG, "running test...");  
 
     if ((memfd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) {
@@ -91,30 +147,20 @@ int main(void) {
     *(gpiomem + GPIO_FSEL2_OFFSET) |= (1 << 9);
 
     // read the gpio pins
-    syslog(LOG_USER|LOG_DEBUG, "test: reading pins");  
+    syslog(LOG_USER|LOG_DEBUG, "test: output signal");  
 
-    syslog(LOG_USER|LOG_DEBUG, "GPIO pins read: %x", *(gpiomem + GPIO_READ_OFFSET));
-        
     // output a square wave with a wavelength of 2 seconds
-    for (i=0;i<20;i++) {
+    for (i = outSignal.tail; i != outSignal.head; i++, outSignal.tail++) {
     
-        syslog(LOG_USER|LOG_DEBUG, "test: setting output pin");  
-
-        *(gpiomem + GPIO_SET_OFFSET) = OUTPUT_PIN_MASK;
+        if (outSignal.buff[i] == 0) {
+            *(gpiomem + GPIO_CLEAR_OFFSET) = OUTPUT_PIN_MASK;
+        }
+        else {
+            *(gpiomem + GPIO_SET_OFFSET) = OUTPUT_PIN_MASK;
+        }
     
-        // sleep for 1 second
-        sleep(1);    
-
-        syslog(LOG_USER|LOG_DEBUG, "GPIO pins read: %x", *(gpiomem + GPIO_READ_OFFSET));
-
-        syslog(LOG_USER|LOG_DEBUG, "test: clearing output pin");  
-
-        *(gpiomem + GPIO_CLEAR_OFFSET) = OUTPUT_PIN_MASK;
-    
-        // sleep for 1 second
-        sleep(1);    
-
-        syslog(LOG_USER|LOG_DEBUG, "GPIO pins read: %x", *(gpiomem + GPIO_READ_OFFSET));
+        // sleep for 1 time unit
+        nanosleep(&timeUnit, NULL);
 
     }
 

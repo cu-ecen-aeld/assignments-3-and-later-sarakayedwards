@@ -21,4 +21,6 @@
 #define OUTPUT_PIN_MASK   (1 << 23)   // using pin 23 for output
 #define INPUT_PIN_MASK    (1 << 24)   // using pin 24 for input
 
+#define MORSE_TIME_UNIT  200  // milliseconds
+
 #endif /* MORSE_DRIVER_H_ */
