@@ -68,6 +68,7 @@ int main(void) {
     volatile uint32_t* gpiomem;
     int memfd;
     int i;
+    int success;
     
     struct timespec timeUnit;
     struct timespec timeLeft;
@@ -110,8 +111,6 @@ int main(void) {
         }
     }
     
-    syslog(LOG_USER|LOG_DEBUG, "test: outSignal buffer = %.*s\n", outSignal.head, outSignal.buff);  
-
     syslog(LOG_USER|LOG_DEBUG, "test: running test...");  
 
     if ((memfd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) {
@@ -166,10 +165,12 @@ int main(void) {
         timeUnit.tv_nsec = (MORSE_TIME_UNIT % 1000) * 1000; // milliseconds to nanoseconds
 
         do {
-            nanosleep(&timeUnit, &timeLeft);
-            timeUnit.tv_sec = timeLeft.tv_sec;
-            timeUnit.tv_nsec = timeLeft.tv_nsec;
-        } while (timeUnit.tv_sec + timeUnit.tv_nsec > 0);
+            if ((success = nanosleep(&timeUnit, &timeLeft)) != 0) {
+                timeUnit.tv_sec = timeLeft.tv_sec;
+                timeUnit.tv_nsec = timeLeft.tv_nsec;
+                syslog(LOG_USER|LOG_DEBUG, "test: errno = %d", errno);  
+            }
+        } while ((success != 0) && (errno == EINTR));
     }
 
     munmap((void*)gpiomem, BLOCK_SIZE);
