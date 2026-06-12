@@ -84,11 +84,11 @@ int main(void) {
     // this is our base address to which we add our offsets
     gpiomem = (uint32_t*)memmap;
     
-    // set the pin as an output by setting the mode bits to 111 for write
+    // set the pin as an output by setting the mode bits to 001 for write
     syslog(LOG_USER|LOG_DEBUG, "test: setting pin function");  
 
     *(gpiomem + GPIO_FSEL2_OFFSET) &= ~(7 << 9);
-    *(gpiomem + GPIO_FSEL2_OFFSET) |= (7 << 9);
+    *(gpiomem + GPIO_FSEL2_OFFSET) |= (1 << 9);
 
     // read the gpio pins
     syslog(LOG_USER|LOG_DEBUG, "test: reading pins");  
