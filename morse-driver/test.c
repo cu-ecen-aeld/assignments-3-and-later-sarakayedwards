@@ -112,7 +112,9 @@ int main(void) {
         }
     }
     
-    syslog(LOG_USER|LOG_DEBUG, "running test...");  
+    syslog(LOG_USER|LOG_DEBUG, "test: outSignal buffer = %.*s\n", outSignal.head, outSignal.buff);  
+
+    syslog(LOG_USER|LOG_DEBUG, "test: running test...");  
 
     if ((memfd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) {
         syslog(LOG_USER|LOG_DEBUG, "test: open failed, errno = %d", errno);
@@ -154,9 +156,11 @@ int main(void) {
     
         if (outSignal.buff[i] == 0) {
             *(gpiomem + GPIO_CLEAR_OFFSET) = OUTPUT_PIN_MASK;
+            syslog(LOG_USER|LOG_DEBUG, "test: 0");  
         }
         else {
             *(gpiomem + GPIO_SET_OFFSET) = OUTPUT_PIN_MASK;
+            syslog(LOG_USER|LOG_DEBUG, "test: 1");  
         }
     
         // sleep for 1 time unit
