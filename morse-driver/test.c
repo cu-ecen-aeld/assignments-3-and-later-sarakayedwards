@@ -93,7 +93,7 @@ int main(void) {
     // read the gpio pins
     syslog(LOG_USER|LOG_DEBUG, "test: reading pins");  
 
-    printf("GPIO pins read: %x", *(gpiomem + GPIO_READ_OFFSET));
+    syslog(LOG_USER|LOG_DEBUG, "GPIO pins read: %x", *(gpiomem + GPIO_READ_OFFSET));
         
     // output a square wave with a wavelength of 2 seconds
     for (i=0;i<20;i++) {
@@ -105,7 +105,7 @@ int main(void) {
         // sleep for 1 second
         sleep(1);    
 
-        printf("GPIO pins read: %x", *(gpiomem + GPIO_READ_OFFSET));
+        syslog(LOG_USER|LOG_DEBUG, "GPIO pins read: %x", *(gpiomem + GPIO_READ_OFFSET));
 
         syslog(LOG_USER|LOG_DEBUG, "test: clearing output pin");  
 
@@ -114,10 +114,11 @@ int main(void) {
         // sleep for 1 second
         sleep(1);    
 
-        printf("GPIO pins read: %x", *(gpiomem + GPIO_READ_OFFSET));
+        syslog(LOG_USER|LOG_DEBUG, "GPIO pins read: %x", *(gpiomem + GPIO_READ_OFFSET));
 
-        munmap((void*)gpiomem, BLOCK_SIZE);
     }
+
+    munmap((void*)gpiomem, BLOCK_SIZE);
 
 /*
     // start by sending a specified sequence
