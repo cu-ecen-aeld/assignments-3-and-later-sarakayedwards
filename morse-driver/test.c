@@ -12,6 +12,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <syslog.h>
+#include <string.h>
 #include <sys/mman.h>
 #include "morse-driver.h"
 
@@ -30,86 +31,11 @@ struct signalBuffer {
 // pre-load with a hard-coded message
 struct signalBuffer outSignal;
 struct signalBuffer inSignal;
+volatile uint32_t* gpiomem;
 
-/******************************************************************************
-* morse_test()
-*
-* No parameters: Output a square wave with a two-second wavelength (1 second
-*                  high, one second low) on the output pin indefinitely.
-*                Read the input pin at half second intervals and output it 
-*                 (0 for low, 1 for high) to stdout.
-* 
-* -wN, where N is a number 1 - 5000:
-*                Output a square wave with a 2N millisecond wavelength (N ms
-*                  high, N ms low) on the output pin.
-*                Read the input pin at N/2 ms intervals and output the first 
-*                 MAX_OUTPUTS readings (0 for low, 1 for high) to stdout.
-*
-* -nN, where N is a number 1 - 5000:
-*                Output N square waves on the output pin.
-*                Read the input pin at the specified interval 2N times.
-*
-******************************************************************************/
-void morse_test(int argc, char* argv[]) {
-    
-
-}
-
-/******************************************************************************
-* int sendBufferContents(int* buffer)
-*
-* Parameters: int* buffer
-*
-******************************************************************************/
-
-int main(void) {
-
+int initHW(void) {
     void* memmap;
-    volatile uint32_t* gpiomem;
     int memfd;
-    int i;
-    int success;
-    
-    struct timespec timeUnit;
-    struct timespec timeLeft;
-
-    // Pre-load output signal with a message
-    // "what hath god wrought" (First message sent by telegraph)
-    // .-- .... .- - / .... .- - .... / --. --- -.. / .-- .-. --- ..- --. .... -
-    // . = high for one unit of time
-    // - = high for three units of time
-    // Space between high signals is low for one unit of time
-    // Space between characters is low for 3 units of time
-    // Space between words is low for 7 units of time
-
-    char morseBuffer[1024] = ".-- .... .- - / .... .- - .... / --. --- -.. / .-- .-. --- ..- --. .... -";
-    outSignal.head = 0;
-    outSignal.tail = 0;
-    
-    // Fill signal buffer with 0s and 1s to output
-    for (i = 0; morseBuffer[i] != '\0'; i ++) {
-        switch (morseBuffer[i]) {
-            case '.':
-                outSignal.buff[outSignal.head++] = 1;
-                outSignal.buff[outSignal.head++] = 0;
-                break;
-            case '-':
-                outSignal.buff[outSignal.head++] = 1;
-                outSignal.buff[outSignal.head++] = 1;
-                outSignal.buff[outSignal.head++] = 1;
-                outSignal.buff[outSignal.head++] = 0;
-                break;
-            case ' ':   // only two time units need to be added to make the 3 total
-                outSignal.buff[outSignal.head++] = 0;
-                outSignal.buff[outSignal.head++] = 0; 
-                break;
-            case '/':   // only two are needed since ' ' will come before and after
-                outSignal.buff[outSignal.head++] = 0;
-                outSignal.buff[outSignal.head++] = 0;
-                break;
-            default :  // don't add anything for any other characters
-        }
-    }
     
     syslog(LOG_USER|LOG_DEBUG, "test: running test...");  
 
@@ -145,13 +71,62 @@ int main(void) {
     *(gpiomem + GPIO_FSEL2_OFFSET) &= ~(7 << 9);
     *(gpiomem + GPIO_FSEL2_OFFSET) |= (1 << 9);
 
-    // read the gpio pins
-    syslog(LOG_USER|LOG_DEBUG, "test: output signal");  
+    return 0;
+}
 
-    // output a square wave with a wavelength of 2 seconds
-    for (i = outSignal.tail; i != outSignal.head; i++, outSignal.tail++) {
+void deinitHW(void) {
+    munmap((void*)gpiomem, BLOCK_SIZE);
+}    
+
+/******************************************************************************
+* morse_test()
+*
+* No parameters: Output a square wave with a two-second wavelength (1 second
+*                  high, one second low) on the output pin indefinitely.
+*                Read the input pin at half second intervals and output it 
+*                 (0 for low, 1 for high) to stdout.
+* 
+* -wN, where N is a number 1 - 5000:
+*                Output a square wave with a 2N millisecond wavelength (N ms
+*                  high, N ms low) on the output pin.
+*                Read the input pin at N/2 ms intervals and output the first 
+*                 MAX_OUTPUTS readings (0 for low, 1 for high) to stdout.
+*
+* -nN, where N is a number 1 - 5000:
+*                Output N square waves on the output pin.
+*                Read the input pin at the specified interval 2N times.
+*
+******************************************************************************/
+void morse_test(char* inStr) {
+
+    int i;
+    int strLen = strlen(inStr);
+    int signalLen;
+    int success;
+
+    struct timespec timeUnit;
+    struct timespec timeLeft;
     
-        if (outSignal.buff[i] == 0) {
+    
+    outSignal.head = 0;
+    outSignal.tail = 0;
+
+    // For each character in the string, look up the encoded signal to send
+    // and add it to the buffer in outSignal.
+    for (i = 0; i < strLen; i++) {
+        if (morseSignalLookUp[(uint8_t)inStr[i]] != NULL) {
+            signalLen = strlen(morseSignalLookUp[(uint8_t)inStr[i]]);
+            strncpy(&(outSignal.buff[outSignal.head]), morseSignalLookUp[(uint8_t)inStr[i]], signalLen);
+            outSignal.head += signalLen;
+        }
+    }
+    
+    // output the signal
+    // *** This thread will be dedicated to sending this signal until it is complete. ***
+    // For future dev: Do this in a separate thread.
+    for (; outSignal.tail != outSignal.head; outSignal.tail++) {
+    
+        if (outSignal.buff[outSignal.tail] == '0') {
             *(gpiomem + GPIO_CLEAR_OFFSET) = OUTPUT_PIN_MASK;
             syslog(LOG_USER|LOG_DEBUG, "test: 0");  
         }
@@ -175,8 +150,80 @@ int main(void) {
         } while ((success != 0) && (errno == EINTR));
     }
 
-    munmap((void*)gpiomem, BLOCK_SIZE);
+}
 
+/******************************************************************************
+* int sendBufferContents(int* buffer)
+*
+* Parameters: int* buffer
+*
+******************************************************************************/
+
+int main(int argc, char* argv[]) {
+
+    int i;
+    char sendStr[100] = "";  // arbitrary limit to avoid long execution time
+    
+    // copy the message to send
+    if (argc > 1) {
+        for (i = 1; i < argc; i++) {
+            strcat(sendStr, argv[i]);
+            strcat(sendStr, " ");
+        }
+    }
+    // if no arguments were passed in, send the default message
+    else {
+        strcpy(sendStr, "what hath god wrought");
+    }
+    
+    // initialize the output hardware
+    if (initHW() != 0) { return -1;}
+    
+    morse_test(sendStr);
+
+    // Pre-load output signal with a message
+    // "what hath god wrought" (First message sent by telegraph)
+    // .-- .... .- - / .... .- - .... / --. --- -.. / .-- .-. --- ..- --. .... -
+    // . = high for one unit of time
+    // - = high for three units of time
+    // Space between high signals is low for one unit of time
+    // Space between characters is low for 3 units of time
+    // Space between words is low for 7 units of time
+
+
+/*******************
+    char morseBuffer[1024] = ".-- .... .- - / .... .- - .... / --. --- -.. / .-- .-. --- ..- --. .... -";
+    
+    // Fill signal buffer with 0s and 1s to output
+    for (i = 0; morseBuffer[i] != '\0'; i ++) {
+        switch (morseBuffer[i]) {
+            case '.':
+                outSignal.buff[outSignal.head++] = 1;
+                outSignal.buff[outSignal.head++] = 0;
+                break;
+            case '-':
+                outSignal.buff[outSignal.head++] = 1;
+                outSignal.buff[outSignal.head++] = 1;
+                outSignal.buff[outSignal.head++] = 1;
+                outSignal.buff[outSignal.head++] = 0;
+                break;
+            case ' ':   // only two time units need to be added to make the 3 total
+                outSignal.buff[outSignal.head++] = 0;
+                outSignal.buff[outSignal.head++] = 0; 
+                break;
+            case '/':   // only two are needed since ' ' will come before and after
+                outSignal.buff[outSignal.head++] = 0;
+                outSignal.buff[outSignal.head++] = 0;
+                break;
+            default :  // don't add anything for any other characters
+        }
+    }
+*******************************************/
+    
+    syslog(LOG_USER|LOG_DEBUG, "test: output signal");  
+
+
+    deinitHW();
 /*
     // start by sending a specified sequence
     printf("Output signal should see high-low-high-low, 500ms each");
