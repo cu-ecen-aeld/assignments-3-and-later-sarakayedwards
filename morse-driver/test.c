@@ -162,7 +162,7 @@ int main(void) {
     
         // sleep for 1 time unit
         timeUnit.tv_sec = MORSE_TIME_UNIT / 1000;
-        timeUnit.tv_nsec = (MORSE_TIME_UNIT % 1000) * 1000; // milliseconds to nanoseconds
+        timeUnit.tv_nsec = (MORSE_TIME_UNIT % 1000) * 1000000; // milliseconds to nanoseconds
 
         do {
             syslog(LOG_USER|LOG_DEBUG, "test: sleep time: %ld seconds, %ld nanoseconds", 
