@@ -172,6 +172,7 @@ int main(int argc, char* argv[]) {
         }
     }
     // if no arguments were passed in, send the default message
+    // (First message sent by telegraph)
     else {
         strcpy(sendStr, "what hath god wrought");
     }
@@ -181,113 +182,5 @@ int main(int argc, char* argv[]) {
     
     morse_test(sendStr);
 
-    // Pre-load output signal with a message
-    // "what hath god wrought" (First message sent by telegraph)
-    // .-- .... .- - / .... .- - .... / --. --- -.. / .-- .-. --- ..- --. .... -
-    // . = high for one unit of time
-    // - = high for three units of time
-    // Space between high signals is low for one unit of time
-    // Space between characters is low for 3 units of time
-    // Space between words is low for 7 units of time
-
-
-/*******************
-    char morseBuffer[1024] = ".-- .... .- - / .... .- - .... / --. --- -.. / .-- .-. --- ..- --. .... -";
-    
-    // Fill signal buffer with 0s and 1s to output
-    for (i = 0; morseBuffer[i] != '\0'; i ++) {
-        switch (morseBuffer[i]) {
-            case '.':
-                outSignal.buff[outSignal.head++] = 1;
-                outSignal.buff[outSignal.head++] = 0;
-                break;
-            case '-':
-                outSignal.buff[outSignal.head++] = 1;
-                outSignal.buff[outSignal.head++] = 1;
-                outSignal.buff[outSignal.head++] = 1;
-                outSignal.buff[outSignal.head++] = 0;
-                break;
-            case ' ':   // only two time units need to be added to make the 3 total
-                outSignal.buff[outSignal.head++] = 0;
-                outSignal.buff[outSignal.head++] = 0; 
-                break;
-            case '/':   // only two are needed since ' ' will come before and after
-                outSignal.buff[outSignal.head++] = 0;
-                outSignal.buff[outSignal.head++] = 0;
-                break;
-            default :  // don't add anything for any other characters
-        }
-    }
-*******************************************/
-    
-    syslog(LOG_USER|LOG_DEBUG, "test: output signal");  
-
-
     deinitHW();
-/*
-    // start by sending a specified sequence
-    printf("Output signal should see high-low-high-low, 500ms each");
-
-    // set for 500ms
-    delayTime.tv_sec = 0;
-    delayTime.tv_nsec = 500000;
-    
-    MORSE_WRITE(1);
-    
-    do {
-        if (sleep(delayTime, &delayTime) == -1) {
-          errType = errno;
-        }
-    } while (errType == EINTR);      
-
-    // set for 500ms
-    delayTime.tv_sec = 0;
-    delayTime.tv_nsec = 500000;
-    
-    MORSE_WRITE(0);
-    
-    do {
-        if (sleep(delayTime, &delayTime) == -1) {
-          errType = errno;
-        }
-    } while (errType == EINTR);      
-
-    // set for 500ms
-    delayTime.tv_sec = 0;
-    delayTime.tv_nsec = 500000;
-    
-    MORSE_WRITE(1);
-    
-    do {
-        if (sleep(delayTime, &delayTime) == -1) {
-          errType = errno;
-        }
-    } while (errType == EINTR);      
-
-    // set for 500ms
-    delayTime.tv_sec = 0;
-    delayTime.tv_nsec = 500000;
-    
-    MORSE_WRITE(0);
-    
-    do {
-        if (sleep(delayTime, &delayTime) == -1) {
-          errType = errno;
-        }
-    } while (errType == EINTR);      
-    
-    // Pause for 10 seconds for test setup
-    printf("Please connect the input to the output.");
-    // set for 10 sec
-    delayTime.tv_sec = 10;
-    delayTime.tv_nsec = 0;
-    
-   do {
-        if (sleep(delayTime, &delayTime) == -1) {
-          errType = errno;
-        }
-    } while (errType == EINTR); 
-    
-    //
-*/
 }
