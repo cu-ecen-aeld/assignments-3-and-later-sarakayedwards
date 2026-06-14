@@ -166,7 +166,14 @@ int main(int argc, char* argv[]) {
     
     // copy the message to send
     if (argc > 1) {
+    
         for (i = 1; i < argc; i++) {
+        
+            if (strlen(sendStr) + strlen(argv[i]) > 100) {
+                printf("Message size is limited to 100 characters.");
+                return -1;
+            }
+
             strcat(sendStr, argv[i]);
             strcat(sendStr, " ");
         }
@@ -183,4 +190,5 @@ int main(int argc, char* argv[]) {
     morse_test(sendStr);
 
     deinitHW();
+
 }
